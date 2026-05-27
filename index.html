@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether3D - Diseñador de Interiores y Modelado 3D</title>
+    <meta name="description" content="Diseña tu casa en 2D y visualízala en un impresionante entorno 3D interactivo con iluminación dinámica.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 9.5L4 11V21C4 21.5523 4.44772 22 5 22H9C9.55228 22 10 21.5523 10 21V15H14V21C14 21.5523 14.4477 22 15 22H19C19.5523 22 20 21.5523 20 21V11L22 9.5L12 2Z" fill="url(#logo-grad)" />
+                    <defs>
+                        <linearGradient id="logo-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>Aether<span>3D</span></h1>
+            </div>
+            
+            <div class="view-toggle-container">
+                <button id="btn-mode-2d" class="toggle-btn active">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>
+                    Plano 2D
+                </button>
+                <button id="btn-mode-3d" class="toggle-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    Vista 3D
+                </button>
+            </div>
+            
+            <div class="global-actions">
+                <button id="btn-undo" class="action-btn" title="Deshacer (Ctrl+Z)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
+                </button>
+                <button id="btn-redo" class="action-btn" title="Rehacer (Ctrl+Y)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path></svg>
+                </button>
+                <button id="btn-theme-toggle" class="action-btn icon-only" title="Cambiar Tema">
+                    <svg id="theme-icon-dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                    <svg id="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                </button>
+                <div class="divider"></div>
+                <button id="btn-import" class="action-btn" title="Importar JSON">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="14 10 12 12 10 10"></polyline><line x1="12" y1="12" x2="12" y2="3"></line></svg>
+                </button>
+                <button id="btn-export" class="action-btn primary" title="Exportar JSON">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Exportar
+                </button>
+                <button id="btn-screenshot" class="action-btn icon-only secondary hide-in-2d" title="Tomar Foto 3D">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                </button>
+                <button id="btn-clear" class="action-btn danger" title="Reiniciar diseño">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                </button>
+            </div>
+            
+            <input type="file" id="import-file-input" style="display: none;" accept=".json">
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="app-workspace">
+            
+            <!-- LEFT PANEL: TOOLS -->
+            <aside class="panel left-panel">
+                <div class="tabs-header">
+                    <button class="tab-btn active" data-tab="tab-walls">Paredes</button>
+                    <button class="tab-btn" data-tab="tab-furniture">Muebles</button>
+                    <button class="tab-btn" data-tab="tab-materials">Materiales</button>
+                    <button class="tab-btn" data-tab="tab-projects">Proyectos</button>
+                </div>
+                
+                <div class="tab-content active" id="tab-walls">
+                    <h3>Estructura</h3>
+                    <div class="tool-grid">
+                        <button id="tool-draw-wall" class="tool-btn" data-tool="wall">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+                            </span>
+                            <span class="tool-name">Pared</span>
+                        </button>
+                        <button id="tool-place-door" class="tool-btn" data-tool="door">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"></path><path d="M9 3v18"></path><circle cx="17" cy="12" r="1"></circle></svg>
+                            </span>
+                            <span class="tool-name">Puerta</span>
+                        </button>
+                        <button id="tool-place-window" class="tool-btn" data-tool="window">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="12" x2="21" y2="12"></line><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+                            </span>
+                            <span class="tool-name">Ventana</span>
+                        </button>
+                        <button id="tool-draw-path" class="tool-btn" data-tool="path">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 18h16M4 12h16" stroke-dasharray="3 3"></path><line x1="4" y1="9" x2="4" y2="15"></line><line x1="20" y1="9" x2="20" y2="15"></line></svg>
+                            </span>
+                            <span class="tool-name">Camino</span>
+                        </button>
+                        <button id="tool-draw-river" class="tool-btn" data-tool="river">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M2 12c3-3 6 3 9 0s6-3 9 0 3 0 4 0"></path><path d="M2 7c3-3 6 3 9 0s6-3 9 0 3 0 4 0"></path><path d="M2 17c3-3 6 3 9 0s6-3 9 0 3 0 4 0"></path></svg>
+                            </span>
+                            <span class="tool-name">Río</span>
+                        </button>
+                        <button id="tool-draw-room" class="tool-btn" data-tool="room">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 3v18M3 9h18"></path></svg>
+                            </span>
+                            <span class="tool-name">Piso Int.</span>
+                        </button>
+                        <button id="tool-select" class="tool-btn active" data-tool="select">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>
+                            </span>
+                            <span class="tool-name">Seleccionar</span>
+                        </button>
+                        <button id="tool-pan" class="tool-btn" data-tool="pan">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"></path><path d="M9 5l3-3 3 3"></path><path d="M15 19l-3 3-3-3"></path><path d="M19 9l3 3-3 3"></path><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></svg>
+                            </span>
+                            <span class="tool-name">Desplazar</span>
+                        </button>
+                    </div>
+                    
+                    <div class="info-box">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <p id="help-text">Selecciona 'Pared' y haz clic en el plano para empezar a dibujar. Las paredes se unirán automáticamente.</p>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-furniture">
+                    <h3>Categorías</h3>
+                    <div class="category-selector">
+                        <select id="furniture-category-select">
+                            <option value="living">Sala / Salón</option>
+                            <option value="bedroom">Dormitorio</option>
+                            <option value="kitchen">Cocina / Comedor</option>
+                            <option value="bathroom">Baño</option>
+                            <option value="decor">Decoración e Iluminación</option>
+                            <option value="outdoor">Jardín / Exterior</option>
+                        </select>
+                    </div>
+                    
+                    <div class="furniture-list" id="furniture-items-container">
+                        <!-- Cargar dinámicamente según categoría -->
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-materials">
+                    <h3>Suelo</h3>
+                    <div class="material-grid" id="floor-material-grid">
+                        <div class="material-card active" data-material="oak">
+                            <div class="material-preview" style="background-color: #d7a15c; background-image: linear-gradient(45deg, #c78d46 25%, transparent 25%), linear-gradient(-45deg, #c78d46 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #c78d46 75%), linear-gradient(-45deg, transparent 75%, #c78d46 75%); background-size: 20px 20px;"></div>
+                            <span class="material-name">Madera Roble</span>
+                        </div>
+                        <div class="material-card" data-material="marble">
+                            <div class="material-preview" style="background-color: #e2e8f0; background-image: radial-gradient(circle at 10% 20%, rgba(0,0,0,0.05) 0%, transparent 40%), radial-gradient(circle at 80% 70%, rgba(0,0,0,0.05) 0%, transparent 30%);"></div>
+                            <span class="material-name">Mármol Blanco</span>
+                        </div>
+                        <div class="material-card" data-material="tile">
+                            <div class="material-preview" style="background: repeating-linear-gradient(0deg, #334155, #334155 2px, transparent 2px, transparent 40px), repeating-linear-gradient(90deg, #334155, #334155 2px, #1e293b 2px, #1e293b 40px);"></div>
+                            <span class="material-name">Baldosa Oscura</span>
+                        </div>
+                        <div class="material-card" data-material="carpet">
+                            <div class="material-preview" style="background-color: #e4e4e7; filter: contrast(1.1) brightness(0.95);"></div>
+                            <span class="material-name">Alfombra Beige</span>
+                        </div>
+                        <div class="material-card" data-material="floating">
+                            <div class="material-preview" style="background-color: #8c6239; background-image: linear-gradient(90deg, rgba(255,255,255,0.07) 50%, transparent 50%), linear-gradient(rgba(0,0,0,0.15) 50%, transparent 50%); background-size: 24px 24px, 100% 8px;"></div>
+                            <span class="material-name">Piso Flotante</span>
+                        </div>
+                        <div class="material-card" data-material="grass">
+                            <div class="material-preview" style="background-color: #22c55e; background-image: radial-gradient(circle, #15803d 10%, transparent 11%), radial-gradient(circle, #16a34a 10%, transparent 11%); background-size: 6px 6px; background-position: 0 0, 3px 3px;"></div>
+                            <span class="material-name">Césped / Pasto</span>
+                        </div>
+                        <div class="material-card" data-material="terracotta">
+                            <div class="material-preview" style="background-color: #c2410c; background-image: linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px); background-size: 20px 20px;"></div>
+                            <span class="material-name">Terracota Rústica</span>
+                        </div>
+                        <div class="material-card" data-material="concrete">
+                            <div class="material-preview" style="background-color: #64748b; background-image: radial-gradient(circle, rgba(0,0,0,0.03) 20%, transparent 20%), radial-gradient(circle, rgba(255,255,255,0.03) 20%, transparent 20%); background-size: 10px 10px; background-position: 0 0, 5px 5px;"></div>
+                            <span class="material-name">Hormigón Pulido</span>
+                        </div>
+                    </div>
+
+                    <h3>Paredes (Color)</h3>
+                    <div class="color-picker-grid" id="wall-color-grid">
+                        <button class="color-swatch active" style="background-color: #f8fafc;" data-color="#f8fafc" title="Blanco Hueso"></button>
+                        <button class="color-swatch" style="background-color: #cbd5e1;" data-color="#cbd5e1" title="Gris Claro"></button>
+                        <button class="color-swatch" style="background-color: #64748b;" data-color="#64748b" title="Gris Piedra"></button>
+                        <button class="color-swatch" style="background-color: #0f172a;" data-color="#0f172a" title="Negro Profundo"></button>
+                        <button class="color-swatch" style="background-color: #fed7aa;" data-color="#fed7aa" title="Salmón Suave"></button>
+                        <button class="color-swatch" style="background-color: #bfdbfe;" data-color="#bfdbfe" title="Azul Pastel"></button>
+                        <button class="color-swatch" style="background-color: #1e3a8a;" data-color="#1e3a8a" title="Azul Marino"></button>
+                        <button class="color-swatch" style="background-color: #134e4a;" data-color="#134e4a" title="Verde Bosque"></button>
+                    </div>
+
+                    <h3>Paredes (Textura)</h3>
+                    <div class="material-grid" id="wall-material-grid">
+                        <div class="material-card active" data-wall-mat="paint">
+                            <div class="material-preview" style="background-color: #f8fafc;"></div>
+                            <span class="material-name">Pintura Lisa</span>
+                        </div>
+                        <div class="material-card" data-wall-mat="brick">
+                            <div class="material-preview" style="background-color: #b91c1c; background-image: repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 12px), repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(255,255,255,0.2) 20px, rgba(255,255,255,0.2) 22px); background-size: 20px 12px;"></div>
+                            <span class="material-name">Ladrillo Rojo</span>
+                        </div>
+                        <div class="material-card" data-wall-mat="brick_old">
+                            <div class="material-preview" style="background-color: #7c2d12; background-image: repeating-linear-gradient(0deg, transparent, transparent 14px, rgba(255,255,255,0.15) 14px, rgba(255,255,255,0.15) 16px), repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.15) 28px, rgba(255,255,255,0.15) 30px); background-size: 28px 16px;"></div>
+                            <span class="material-name">Ladrillo Viejo</span>
+                        </div>
+                        <div class="material-card" data-wall-mat="wood">
+                            <div class="material-preview" style="background-color: #b45309; background-image: linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px); background-size: 10px 100%;"></div>
+                            <span class="material-name">Pared de Madera</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="tab-projects">
+                    <h3>Mis Proyectos</h3>
+                    <button id="btn-new-project" class="action-btn primary" style="width: 100%; margin-bottom: 12px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Nuevo Proyecto
+                    </button>
+                    <div class="project-list" id="project-list-container">
+                        <!-- Cargar dinámicamente -->
+                    </div>
+                </div>
+            </aside>
+            
+            <div class="resizer" id="resizer-left"></div>
+            
+            <!-- CENTRAL WORKSPACE -->
+            <div class="workspace-viewport">
+                <!-- 2D Canvas Container -->
+                <div id="canvas-2d-container" class="viewport-canvas active">
+                    <canvas id="editor-2d-canvas"></canvas>
+                    <div class="canvas-controls">
+                        <button id="btn-zoom-in" class="circle-btn" title="Acercar">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                        <button id="btn-zoom-out" class="circle-btn" title="Alejar">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                        <button id="btn-reset-view" class="circle-btn" title="Centrar">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
+                        </button>
+                        <div class="control-divider"></div>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="chk-grid-snap" checked>
+                            <span class="checkmark"></span>
+                            Alinear a cuadrícula
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- 3D Canvas Container -->
+                <div id="canvas-3d-container" class="viewport-canvas">
+                    <!-- Three.js Canvas will be inserted here -->
+                </div>
+            </div>
+            
+            <div class="resizer" id="resizer-right"></div>
+            
+            <!-- RIGHT PANEL: PROPERTIES & ENVIRONMENT -->
+            <aside class="panel right-panel">
+                <div class="section">
+                    <h3>Propiedades</h3>
+                    <div id="properties-empty-state" class="empty-state">
+                        <p>No hay ningún elemento seleccionado.</p>
+                        <span>Haz clic sobre una pared, puerta, ventana o mueble para editarlo.</span>
+                    </div>
+                    
+                    <div id="properties-editor" class="properties-form" style="display: none;">
+                        <h4 id="prop-title">Mueble</h4>
+                        
+                        <div class="form-group">
+                            <label>Rotación</label>
+                            <div class="slider-control">
+                                <input type="range" id="prop-rotation" min="0" max="360" value="0">
+                                <span id="prop-rotation-val">0°</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="prop-color-group">
+                            <label>Color Personalizado</label>
+                            <input type="color" id="prop-color" value="#ffffff">
+                        </div>
+
+                        <div class="form-group dimensions-group">
+                            <div>
+                                <label>Ancho (m)</label>
+                                <input type="number" id="prop-width" step="0.05" min="0.1">
+                            </div>
+                            <div>
+                                <label>Largo (m)</label>
+                                <input type="number" id="prop-length" step="0.05" min="0.1">
+                            </div>
+                            <div id="prop-height-container">
+                                <label>Alto (m)</label>
+                                <input type="number" id="prop-height" step="0.05" min="0.1">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" id="prop-path-material-group" style="display: none; margin-top: 10px;">
+                            <label>Material del Camino</label>
+                            <select id="prop-path-material">
+                                <option value="concrete">Hormigón Pulido</option>
+                                <option value="wood">Madera</option>
+                                <option value="brick">Ladrillo Rojo</option>
+                                <option value="cobblestone">Adoquines</option>
+                                <option value="gravel">Grava / Piedra</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="prop-room-material-group" style="display: none; margin-top: 10px;">
+                            <label>Material del Piso (Interior)</label>
+                            <select id="prop-room-material">
+                                <option value="oak">Madera de Roble</option>
+                                <option value="floating">Piso Flotante</option>
+                                <option value="marble">Mármol Blanco</option>
+                                <option value="tile">Baldosa Oscura</option>
+                                <option value="carpet">Alfombra Beige</option>
+                                <option value="terracotta">Terracota Rústica</option>
+                                <option value="concrete">Hormigón Pulido</option>
+                                <option value="grass">Césped / Pasto</option>
+                            </select>
+                        </div>
+
+                        <div class="properties-actions">
+                            <button id="btn-prop-duplicate" class="action-btn secondary">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                Duplicar
+                            </button>
+                            <button id="btn-prop-delete" class="action-btn danger">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h3>Atmósfera y Luz</h3>
+                    <div class="time-presets">
+                        <button class="time-btn" data-time="morning">
+                            <span class="time-icon">🌅</span>
+                            <span>Mañana</span>
+                        </button>
+                        <button class="time-btn active" data-time="noon">
+                            <span class="time-icon">☀️</span>
+                            <span>Mediodía</span>
+                        </button>
+                        <button class="time-btn" data-time="sunset">
+                            <span class="time-icon">🌇</span>
+                            <span>Atardecer</span>
+                        </button>
+                        <button class="time-btn" data-time="night">
+                            <span class="time-icon">🌙</span>
+                            <span>Noche</span>
+                        </button>
+                    </div>
+                    
+                    <div class="environment-options">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="chk-shadows" checked>
+                            <span class="checkmark"></span>
+                            Sombras en tiempo real
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="chk-grid-3d" checked>
+                            <span class="checkmark"></span>
+                            Mostrar rejilla 3D
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="chk-sky-blue">
+                            <span class="checkmark"></span>
+                            Cielo Celeste
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="chk-sky-clouds">
+                            <span class="checkmark"></span>
+                            Mostrar Nubes
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-top: 16px; padding: 0 4px;">
+                        <label>Tamaño del Terreno</label>
+                        <div class="slider-control">
+                            <input type="range" id="prop-ground-size" min="10" max="100" step="10" value="30">
+                            <span id="prop-ground-size-val">30m</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+        
+        <!-- FOOTER / STATS -->
+        <footer class="app-footer">
+            <div class="stats-item">
+                <span class="label">Paredes:</span>
+                <span id="stat-walls-count" class="value">0</span>
+            </div>
+            <div class="stats-item">
+                <span class="label">Objetos:</span>
+                <span id="stat-furniture-count" class="value">0</span>
+            </div>
+            <div class="stats-item" id="dimension-scale">
+                <span class="label">Escala:</span>
+                <span class="value">1 cuadrito = 0.5m</span>
+            </div>
+            <div class="footer-msg">
+                <span>Presiona <b>Supr/Backspace</b> para eliminar seleccionados • <b>R</b> para rotar</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- MODAL DE CONFIRMACIÓN DE REINICIO -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <h2>Reiniciar Diseño</h2>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas limpiar el diseño actual? Perderás todos los elementos de este proyecto. Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-confirm-cancel" class="action-btn secondary">Cancelar</button>
+                <button id="btn-confirm-accept" class="action-btn danger">Sí, reiniciar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
