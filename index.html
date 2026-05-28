@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aether3D - Diseñador de Interiores y Modelado 3D</title>
+    <title>Habita3D - Diseñador de Interiores y Modelado 3D</title>
     <meta name="description" content="Diseña tu casa en 2D y visualízala en un impresionante entorno 3D interactivo con iluminación dinámica.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,7 +23,7 @@
                         </linearGradient>
                     </defs>
                 </svg>
-                <h1>Aether<span>3D</span></h1>
+                <h1>Habita<span>3D</span></h1>
             </div>
             
             <div class="view-toggle-container">
@@ -118,6 +118,12 @@
                             </span>
                             <span class="tool-name">Piso Int.</span>
                         </button>
+                        <button id="tool-draw-fence" class="tool-btn" data-tool="fence">
+                            <span class="tool-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round"><path d="M4 4v16M8 8v12M12 4v16M16 8v12M20 4v16M2 8h20M2 16h20"></path></svg>
+                            </span>
+                            <span class="tool-name">Cerca/Reja</span>
+                        </button>
                         <button id="tool-select" class="tool-btn active" data-tool="select">
                             <span class="tool-icon">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>
@@ -191,9 +197,17 @@
                             <div class="material-preview" style="background-color: #64748b; background-image: radial-gradient(circle, rgba(0,0,0,0.03) 20%, transparent 20%), radial-gradient(circle, rgba(255,255,255,0.03) 20%, transparent 20%); background-size: 10px 10px; background-position: 0 0, 5px 5px;"></div>
                             <span class="material-name">Hormigón Pulido</span>
                         </div>
+                        <div class="material-card" data-material="ceramic">
+                            <div class="material-preview" style="background-color: #ffffff; background-image: linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px); background-size: 25px 25px;"></div>
+                            <span class="material-name">Cerámica Blanca</span>
+                        </div>
+                        <div class="material-card" data-material="parquet">
+                            <div class="material-preview" style="background-color: #b45309; background-image: linear-gradient(45deg, rgba(0,0,0,0.15) 25%, transparent 25%), linear-gradient(-45deg, rgba(0,0,0,0.15) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(0,0,0,0.15) 75%), linear-gradient(-45deg, transparent 75%, rgba(0,0,0,0.15) 75%); background-size: 30px 30px;"></div>
+                            <span class="material-name">Parquet Clásico</span>
+                        </div>
                     </div>
 
-                    <h3>Paredes (Color)</h3>
+                    <h3 id="wall-color-title">Paredes (Color)</h3>
                     <div class="color-picker-grid" id="wall-color-grid">
                         <button class="color-swatch active" style="background-color: #f8fafc;" data-color="#f8fafc" title="Blanco Hueso"></button>
                         <button class="color-swatch" style="background-color: #cbd5e1;" data-color="#cbd5e1" title="Gris Claro"></button>
@@ -203,6 +217,14 @@
                         <button class="color-swatch" style="background-color: #bfdbfe;" data-color="#bfdbfe" title="Azul Pastel"></button>
                         <button class="color-swatch" style="background-color: #1e3a8a;" data-color="#1e3a8a" title="Azul Marino"></button>
                         <button class="color-swatch" style="background-color: #134e4a;" data-color="#134e4a" title="Verde Bosque"></button>
+                    </div>
+                    <div class="color-picker-grid" id="wall-wood-color-grid" style="display: none;">
+                        <button class="color-swatch" style="background-color: #ebd1a9;" data-color="#ebd1a9" title="Pino Natural"></button>
+                        <button class="color-swatch" style="background-color: #d4a373;" data-color="#d4a373" title="Roble Claro"></button>
+                        <button class="color-swatch" style="background-color: #b45309;" data-color="#b45309" title="Cerezo Cálido"></button>
+                        <button class="color-swatch" style="background-color: #5c4033;" data-color="#5c4033" title="Nogal Elegante"></button>
+                        <button class="color-swatch" style="background-color: #2b1d0c;" data-color="#2b1d0c" title="Wengué Oscuro"></button>
+                        <button class="color-swatch" style="background-color: #8c857b;" data-color="#8c857b" title="Madera Grisácea"></button>
                     </div>
 
                     <h3>Paredes (Textura)</h3>
@@ -295,6 +317,17 @@
                         <div class="form-group" id="prop-color-group">
                             <label>Color Personalizado</label>
                             <input type="color" id="prop-color" value="#ffffff">
+                            <div id="prop-suggested-wood-colors" style="display: none; margin-top: 8px;">
+                                <label style="font-size: 11px; opacity: 0.8; margin-bottom: 4px;">Sugerencias Tono Madera</label>
+                                <div class="color-picker-grid" style="grid-template-columns: repeat(6, 1fr); gap: 4px;">
+                                    <button class="color-swatch mini" style="background-color: #ebd1a9; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#ebd1a9" title="Pino Natural"></button>
+                                    <button class="color-swatch mini" style="background-color: #d4a373; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#d4a373" title="Roble Claro"></button>
+                                    <button class="color-swatch mini" style="background-color: #b45309; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#b45309" title="Cerezo Cálido"></button>
+                                    <button class="color-swatch mini" style="background-color: #5c4033; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#5c4033" title="Nogal Elegante"></button>
+                                    <button class="color-swatch mini" style="background-color: #2b1d0c; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#2b1d0c" title="Wengué Oscuro"></button>
+                                    <button class="color-swatch mini" style="background-color: #8c857b; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#8c857b" title="Madera Grisácea"></button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-group dimensions-group">
@@ -334,6 +367,17 @@
                                 <option value="terracotta">Terracota Rústica</option>
                                 <option value="concrete">Hormigón Pulido</option>
                                 <option value="grass">Césped / Pasto</option>
+                                <option value="ceramic">Cerámica Blanca</option>
+                                <option value="parquet">Parquet Clásico</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="prop-fence-material-group" style="display: none; margin-top: 10px;">
+                            <label>Tipo de Cerca/Reja</label>
+                            <select id="prop-fence-material">
+                                <option value="wood">Cerca de Madera</option>
+                                <option value="metal">Reja de Metal</option>
+                                <option value="glass">Baranda de Vidrio</option>
                             </select>
                         </div>
 

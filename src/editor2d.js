@@ -1,5 +1,5 @@
 /**
- * AETHER3D - EDITOR 2D (MODULO ES)
+ * HABITA3D - EDITOR 2D (MODULO ES)
  * Maneja el lienzo 2D, el plano de planta, dibujo de paredes e interactividad
  */
 
@@ -21,13 +21,17 @@ export default class Editor2D {
         this.isPanning = false;
         this.panStartX = 0;
         this.panStartY = 0;
+        this.panStartClientX = 0;
+        this.panStartClientY = 0;
+        this.hasMovedWhilePanning = false;
         
         this.draggedItem = null;
         this.dragOffset = { x: 0, y: 0 };
         
-        // Paredes y caminos temporales
+        // Paredes, caminos y cercas temporales
         this.wallChainStart = null;
         this.pathChainStart = null;
+        this.fenceChainStart = null;
         
         this.initEvents();
         this.resize();
@@ -52,11 +56,14 @@ export default class Editor2D {
         
         // Mouse Down
         this.canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 1 || (e.button === 0 && (e.shiftKey || this.app.currentTool === 'pan'))) {
-                // Click central, Shift+Click o Herramienta Desplazar activa: Iniciar Pan
+            if (e.button === 2 || e.button === 1 || (e.button === 0 && (e.shiftKey || this.app.currentTool === 'pan'))) {
+                // Click derecho (2), central (1), Shift+Click o Herramienta Desplazar activa: Iniciar Pan
                 this.isPanning = true;
+                this.hasMovedWhilePanning = false;
                 this.panStartX = e.clientX - this.panX;
                 this.panStartY = e.clientY - this.panY;
+                this.panStartClientX = e.clientX;
+                this.panStartClientY = e.clientY;
                 this.canvas.style.cursor = 'grabbing';
                 return;
             }
@@ -68,6 +75,8 @@ export default class Editor2D {
                     this.handleWallDrawingClick(mouseWorld);
                 } else if (['path', 'river'].includes(this.app.currentTool)) {
                     this.handlePathDrawingClick(mouseWorld);
+                } else if (this.app.currentTool === 'fence') {
+                    this.handleFenceDrawingClick(mouseWorld);
                 } else if (this.app.currentTool === 'select') {
                     this.handleSelectionClick(mouseWorld, e);
                 } else if (this.app.currentTool === 'room') {
@@ -85,6 +94,12 @@ export default class Editor2D {
             const mouseWorld = this.getMouseWorld(e);
             
             if (this.isPanning) {
+                if (!this.hasMovedWhilePanning) {
+                    const dist = Math.hypot(e.clientX - this.panStartClientX, e.clientY - this.panStartClientY);
+                    if (dist > 5) {
+                        this.hasMovedWhilePanning = true;
+                    }
+                }
                 this.panX = e.clientX - this.panStartX;
                 this.panY = e.clientY - this.panStartY;
                 this.draw();
@@ -102,6 +117,8 @@ export default class Editor2D {
                 this.draw(); // Redibujar para mostrar la pared de vista previa
             } else if (['path', 'river'].includes(this.app.currentTool) && this.pathChainStart) {
                 this.draw(); // Previsualización del camino/río
+            } else if (this.app.currentTool === 'fence' && this.fenceChainStart) {
+                this.draw(); // Previsualización de cerca
             } else if (['door', 'window'].includes(this.app.currentTool) || this.app.currentFurnitureTool) {
                 this.draw(); // Mostrar previsualización flotante
             } else if (this.app.currentTool === 'select') {
@@ -153,6 +170,11 @@ export default class Editor2D {
         // Cancelar dibujo / Deseleccionar con Click derecho o ESC
         this.canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            if (this.hasMovedWhilePanning) {
+                // Si se desplazó la vista con el click derecho, evitar cancelar la acción activa
+                this.hasMovedWhilePanning = false;
+                return;
+            }
             this.cancelCurrentAction();
         });
     }
@@ -165,6 +187,9 @@ export default class Editor2D {
             const isRiver = this.app.currentTool === 'river';
             this.pathChainStart = null;
             this.app.setHelpText(isRiver ? "Dibujo de río cancelado." : "Dibujo de camino cancelado.");
+        } else if (this.app.currentTool === 'fence' && this.fenceChainStart) {
+            this.fenceChainStart = null;
+            this.app.setHelpText("Dibujo de cerca/reja cancelado.");
         } else if (this.app.currentFurnitureTool) {
             this.app.currentFurnitureTool = null;
             this.app.deselectFurnitureCards();
@@ -255,6 +280,52 @@ export default class Editor2D {
             }
         }
         return null;
+    }
+
+    getNearbyFenceNode(pt, radius) {
+        if (!this.app.fences) return null;
+        for (const fence of this.app.fences) {
+            if (Math.hypot(pt.x - fence.x1, pt.y - fence.y1) < radius) {
+                return { x: fence.x1, y: fence.y1 };
+            }
+            if (Math.hypot(pt.x - fence.x2, pt.y - fence.y2) < radius) {
+                return { x: fence.x2, y: fence.y2 };
+            }
+        }
+        return null;
+    }
+
+    handleFenceDrawingClick(pt) {
+        const snapped = this.snapPoint(pt);
+        const snappedToFenceNode = this.getNearbyFenceNode(pt, 0.2);
+        const finalPt = snappedToFenceNode || snapped;
+
+        if (this.fenceChainStart === null) {
+            this.fenceChainStart = finalPt;
+            this.app.setHelpText("Haz clic en otro lugar para colocar la cerca. Click derecho/ESC para terminar.");
+        } else {
+            const dx = finalPt.x - this.fenceChainStart.x;
+            const dy = finalPt.y - this.fenceChainStart.y;
+            const length = Math.hypot(dx, dy);
+
+            if (length > 0.1) {
+                const newFence = {
+                    id: 'fence_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    x1: this.fenceChainStart.x,
+                    y1: this.fenceChainStart.y,
+                    x2: finalPt.x,
+                    y2: finalPt.y,
+                    thickness: 0.15,
+                    height: 1.2,
+                    material: 'wood'
+                };
+                this.app.fences.push(newFence);
+                this.app.saveState();
+                
+                this.fenceChainStart = { x: finalPt.x, y: finalPt.y };
+            }
+        }
+        this.draw();
     }
 
     handleWallDrawingClick(pt) {
@@ -477,6 +548,15 @@ export default class Editor2D {
             }
         }
 
+        if (this.app.fences) {
+            for (const fence of this.app.fences) {
+                const dist = this.getDistanceToSegment(pt, {x: fence.x1, y: fence.y1}, {x: fence.x2, y: fence.y2});
+                if (dist < (fence.thickness || 0.15) / 2 + 0.1) {
+                    return fence;
+                }
+            }
+        }
+
         if (this.app.paths) {
             for (const path of this.app.paths) {
                 const dist = this.getDistanceToSegment(pt, {x: path.x1, y: path.y1}, {x: path.x2, y: path.y2});
@@ -584,6 +664,7 @@ export default class Editor2D {
         this.drawRooms();
         this.drawPaths(); // Dibujar caminos debajo de las paredes
         this.drawWalls();
+        this.drawFences(); // Dibujar cercas encima/alrededor de las paredes
         this.drawOpenings();
         this.drawFurniture();
         this.drawToolPreviews();
@@ -600,7 +681,10 @@ export default class Editor2D {
             'tile': 'Baldosa',
             'carpet': 'Alfombra',
             'terracotta': 'Terracota',
-            'concrete': 'Cemento'
+            'concrete': 'Cemento',
+            'grass': 'Césped',
+            'ceramic': 'Cerámica',
+            'parquet': 'Parquet'
         };
 
         this.app.roomMarkers.forEach(marker => {
@@ -842,7 +926,10 @@ export default class Editor2D {
             const isSelected = this.app.selectedElement === wall;
             const isLight = this.app.theme === 'light';
             const wallOutlineColor = isSelected ? (isLight ? '#4f46e5' : '#6366f1') : (isLight ? '#0f172a' : '#1e293b');
-            const wallBodyColor = isSelected ? (isLight ? '#c7d2fe' : '#3b82f6') : (isLight ? '#475569' : '#64748b');
+            let wallBodyColor = isSelected ? (isLight ? '#c7d2fe' : '#3b82f6') : (isLight ? '#475569' : '#64748b');
+            if (!isSelected && wall.color) {
+                wallBodyColor = wall.color;
+            }
 
             this.ctx.beginPath();
             this.ctx.moveTo(p1.x, p1.y);
@@ -860,6 +947,109 @@ export default class Editor2D {
             this.ctx.lineCap = 'square';
             this.ctx.stroke();
             
+            if (isSelected) {
+                this.ctx.fillStyle = '#60a5fa';
+                this.ctx.beginPath();
+                this.ctx.arc(p1.x, p1.y, 6, 0, Math.PI * 2);
+                this.ctx.arc(p2.x, p2.y, 6, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        });
+    }
+
+    drawFences() {
+        if (!this.app.fences) return;
+        this.app.fences.forEach(fence => {
+            const p1 = this.worldToScreen(fence.x1, fence.y1);
+            const p2 = this.worldToScreen(fence.x2, fence.y2);
+            const isSelected = this.app.selectedElement === fence;
+            const isLight = this.app.theme === 'light';
+            const type = fence.material || 'wood';
+            
+            const thickness = fence.thickness || 0.15;
+            
+            if (isSelected) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.strokeStyle = isLight ? 'rgba(99, 102, 241, 0.4)' : 'rgba(99, 102, 241, 0.6)';
+                this.ctx.lineWidth = (thickness + 0.08) * this.zoom;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+            }
+
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+
+            if (type === 'wood') {
+                this.ctx.strokeStyle = '#854d0e';
+                this.ctx.lineWidth = thickness * this.zoom;
+                this.ctx.lineCap = 'round';
+                this.ctx.setLineDash([8, 6]);
+                this.ctx.stroke();
+            } else if (type === 'metal') {
+                this.ctx.strokeStyle = isLight ? '#334155' : '#94a3b8';
+                this.ctx.lineWidth = 0.06 * this.zoom;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                const postSpacing = 1.0 * this.zoom;
+                const numPosts = Math.max(2, Math.round(dist / postSpacing) + 1);
+                
+                this.ctx.fillStyle = isLight ? '#1e293b' : '#cbd5e1';
+                for (let i = 0; i < numPosts; i++) {
+                    const t = i / (numPosts - 1);
+                    const px = p1.x + (p2.x - p1.x) * t;
+                    const py = p1.y + (p2.y - p1.y) * t;
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(px, py, 4, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            } else if (type === 'glass') {
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const len = Math.hypot(dx, dy);
+                const ux = dx / len;
+                const uy = dy / len;
+                const nx = -uy;
+                const ny = ux;
+                
+                const offset = (thickness / 2) * this.zoom;
+                
+                this.ctx.strokeStyle = '#38bdf8';
+                this.ctx.lineWidth = 2;
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x + nx * offset, p1.y + ny * offset);
+                this.ctx.lineTo(p2.x + nx * offset, p2.y + ny * offset);
+                this.ctx.stroke();
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x - nx * offset, p1.y - ny * offset);
+                this.ctx.lineTo(p2.x - nx * offset, p2.y - ny * offset);
+                this.ctx.stroke();
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x - nx * offset, p1.y - ny * offset);
+                this.ctx.lineTo(p1.x + nx * offset, p1.y + ny * offset);
+                this.ctx.lineTo(p2.x + nx * offset, p2.y + ny * offset);
+                this.ctx.lineTo(p2.x - nx * offset, p2.y - ny * offset);
+                this.ctx.closePath();
+                this.ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+                this.ctx.fill();
+
+                this.ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
+                this.ctx.beginPath();
+                this.ctx.arc(p1.x, p1.y, 3, 0, Math.PI * 2);
+                this.ctx.arc(p2.x, p2.y, 3, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            this.ctx.restore();
+
             if (isSelected) {
                 this.ctx.fillStyle = '#60a5fa';
                 this.ctx.beginPath();
@@ -1035,6 +1225,32 @@ export default class Editor2D {
             const midY = (p1.y + p2.y) / 2;
             
             this.ctx.fillStyle = '#93c5fd';
+            this.ctx.font = 'bold 12px var(--font-sans)';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`${len.toFixed(2)} m`, midX, midY - 12);
+        }
+
+        if (this.app.currentTool === 'fence' && this.fenceChainStart && mousePos) {
+            const p1 = this.worldToScreen(this.fenceChainStart.x, this.fenceChainStart.y);
+            const snappedMouse = this.snapPoint(mousePos);
+            
+            const snappedToNode = this.getNearbyFenceNode(mousePos, 0.2);
+            const finalMouse = snappedToNode || snappedMouse;
+            const p2 = this.worldToScreen(finalMouse.x, finalMouse.y);
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.strokeStyle = 'rgba(133, 77, 14, 0.5)';
+            this.ctx.lineWidth = 0.15 * this.zoom;
+            this.ctx.lineCap = 'round';
+            this.ctx.stroke();
+
+            const len = Math.hypot(finalMouse.x - this.fenceChainStart.x, finalMouse.y - this.fenceChainStart.y);
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            
+            this.ctx.fillStyle = '#854d0e';
             this.ctx.font = 'bold 12px var(--font-sans)';
             this.ctx.textAlign = 'center';
             this.ctx.fillText(`${len.toFixed(2)} m`, midX, midY - 12);

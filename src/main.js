@@ -1,5 +1,5 @@
 /**
- * AETHER3D - CORE CONTROLLER (VITE MAIN ENTRY POINT)
+ * HABITA3D - CORE CONTROLLER (VITE MAIN ENTRY POINT)
  * Orquesta los estados, la sincronización entre 2D y 3D, el historial, el guardado y la UI.
  */
 
@@ -8,13 +8,14 @@ import { FURNITURE_CATALOG } from './models.js';
 import Editor2D from './editor2d.js';
 import Renderer3D from './renderer3d.js';
 
-class AetherApp {
+class HabitaApp {
     constructor() {
         // Datos principales del diseño
         this.walls = [];
         this.furniture = [];
         this.openings = [];
         this.paths = []; // Caminos exteriores
+        this.fences = []; // Cercas y rejas
         this.rooms = [];
         this.roomMarkers = [];
         
@@ -82,7 +83,7 @@ class AetherApp {
         // 7. Forzar redibujado inicial de la vista 2D con los datos cargados
         this.editor2D.resize();
 
-        this.setHelpText("Bienvenido a Aether3D. Comienza dibujando una pared o colocando muebles.");
+        this.setHelpText("Bienvenido a Habita3D. Comienza dibujando una pared o colocando muebles.");
     }
 
     // --- MANEJO DE HISTORIAL (UNDO/REDO) ---
@@ -95,6 +96,7 @@ class AetherApp {
             furniture: this.furniture,
             openings: this.openings,
             paths: this.paths,
+            fences: this.fences,
             activeFloorMaterial: this.activeFloorMaterial,
             wallColor: this.wallColor,
             wallMaterial: this.wallMaterial,
@@ -152,6 +154,7 @@ class AetherApp {
         this.furniture = data.furniture || [];
         this.openings = data.openings || [];
         this.paths = data.paths || [];
+        this.fences = data.fences || [];
         this.activeFloorMaterial = data.activeFloorMaterial || 'oak';
         this.wallColor = data.wallColor || '#f8fafc';
         this.wallMaterial = data.wallMaterial || 'paint';
@@ -181,7 +184,7 @@ class AetherApp {
         this.syncMaterialUI();
 
         if (this.selectedElement) {
-            const found = [...this.walls, ...this.furniture, ...this.openings, ...this.paths, ...this.roomMarkers].find(el => el.id === this.selectedElement.id);
+            const found = [...this.walls, ...this.furniture, ...this.openings, ...this.paths, ...this.roomMarkers, ...this.fences].find(el => el.id === this.selectedElement.id);
             if (!found) this.setSelectedElement(null);
             else this.selectedElement = found;
         }
@@ -220,6 +223,8 @@ class AetherApp {
             }
         });
 
+        this.updateWallColorGridVisibility();
+
         const chkSkyBlue = document.getElementById('chk-sky-blue');
         if (chkSkyBlue) chkSkyBlue.checked = this.skyBlue;
 
@@ -231,6 +236,40 @@ class AetherApp {
         if (rangeGround && rangeGroundVal) {
             rangeGround.value = this.groundSize;
             rangeGroundVal.textContent = `${this.groundSize}m`;
+        }
+    }
+
+    updateWallColorGridVisibility() {
+        const wallColorTitle = document.getElementById('wall-color-title');
+        const wallColorGrid = document.getElementById('wall-color-grid');
+        const wallWoodColorGrid = document.getElementById('wall-wood-color-grid');
+        
+        if (!wallColorGrid || !wallWoodColorGrid) return;
+        
+        if (this.wallMaterial === 'wood') {
+            wallColorGrid.style.display = 'none';
+            wallWoodColorGrid.style.display = 'grid';
+            if (wallColorTitle) wallColorTitle.textContent = 'Paredes (Tono de Madera)';
+            
+            document.querySelectorAll('#wall-wood-color-grid .color-swatch').forEach(swatch => {
+                if (swatch.dataset.color.toLowerCase() === this.wallColor.toLowerCase()) {
+                    swatch.classList.add('active');
+                } else {
+                    swatch.classList.remove('active');
+                }
+            });
+        } else {
+            wallColorGrid.style.display = 'grid';
+            wallWoodColorGrid.style.display = 'none';
+            if (wallColorTitle) wallColorTitle.textContent = 'Paredes (Color)';
+            
+            document.querySelectorAll('#wall-color-grid .color-swatch').forEach(swatch => {
+                if (swatch.dataset.color.toLowerCase() === this.wallColor.toLowerCase()) {
+                    swatch.classList.add('active');
+                } else {
+                    swatch.classList.remove('active');
+                }
+            });
         }
     }
 
@@ -321,12 +360,33 @@ class AetherApp {
             });
         });
 
+        document.querySelectorAll('#wall-wood-color-grid .color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                document.querySelectorAll('#wall-wood-color-grid .color-swatch').forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+                
+                this.wallColor = swatch.dataset.color;
+                this.saveState();
+                this.editor2D.draw();
+                if (this.currentViewMode === '3d') this.sync3DScene();
+            });
+        });
+
         document.querySelectorAll('#wall-material-grid .material-card').forEach(card => {
             card.addEventListener('click', () => {
                 document.querySelectorAll('#wall-material-grid .material-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
                 
                 this.wallMaterial = card.dataset.wallMat;
+                this.updateWallColorGridVisibility();
+                
+                if (this.wallMaterial === 'wood') {
+                    const woodColors = ['#ebd1a9', '#d4a373', '#b45309', '#5c4033', '#2b1d0c', '#8c857b'];
+                    if (!woodColors.includes(this.wallColor.toLowerCase())) {
+                        this.wallColor = '#b45309';
+                    }
+                }
+                
                 this.saveState();
                 this.editor2D.draw();
                 if (this.currentViewMode === '3d') this.sync3DScene();
@@ -422,7 +482,7 @@ class AetherApp {
             
             const dlAnchorElem = document.createElement('a');
             dlAnchorElem.setAttribute("href",     dataStr     );
-            dlAnchorElem.setAttribute("download", `Aether3D_Proyecto_${Date.now()}.json`);
+            dlAnchorElem.setAttribute("download", `Habita3D_Proyecto_${Date.now()}.json`);
             dlAnchorElem.click();
             this.setHelpText("Proyecto exportado correctamente como archivo .json.");
         });
@@ -444,7 +504,7 @@ class AetherApp {
                         this.saveState();
                         this.setHelpText("Diseño importado con éxito.");
                     } else {
-                        alert("El archivo JSON no contiene un formato de diseño Aether3D válido.");
+                        alert("El archivo JSON no contiene un formato de diseño Habita3D válido.");
                     }
                 } catch (err) {
                     alert("Error al leer el archivo JSON.");
@@ -481,16 +541,56 @@ class AetherApp {
         const propColor = document.getElementById('prop-color');
         propColor.addEventListener('input', (e) => {
             const val = e.target.value;
-            if (this.selectedElement && this.selectedElement.catalogId !== undefined) {
-                this.selectedElement.color = val;
-                this.editor2D.draw();
-                
-                if (this.currentViewMode === '3d') {
-                    this.sync3DScene();
+            if (this.selectedElement) {
+                if (this.selectedElement.catalogId !== undefined || (this.selectedElement.id && this.selectedElement.id.startsWith('wall_'))) {
+                    this.selectedElement.color = val;
+                    this.editor2D.draw();
+                    
+                    if (this.currentViewMode === '3d') {
+                        this.sync3DScene();
+                    }
                 }
             }
         });
         propColor.addEventListener('change', () => this.saveState());
+
+        document.querySelectorAll('#prop-suggested-wood-colors .color-swatch.mini').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                const color = swatch.dataset.color;
+                const propColor = document.getElementById('prop-color');
+                if (propColor) propColor.value = color;
+                
+                if (this.selectedElement) {
+                    this.selectedElement.color = color;
+                    this.editor2D.draw();
+                    if (this.currentViewMode === '3d') {
+                        this.sync3DScene();
+                    }
+                    this.saveState();
+                }
+            });
+        });
+
+        const propFenceMaterial = document.getElementById('prop-fence-material');
+        if (propFenceMaterial) {
+            propFenceMaterial.addEventListener('change', (e) => {
+                if (this.selectedElement && this.selectedElement.id && this.selectedElement.id.startsWith('fence_')) {
+                    this.selectedElement.material = e.target.value;
+                    const materialNames = {
+                        'wood': 'Cerca de Madera',
+                        'metal': 'Reja de Metal',
+                        'glass': 'Baranda de Vidrio'
+                    };
+                    const title = document.getElementById('prop-title');
+                    if (title) {
+                        title.textContent = materialNames[e.target.value] || 'Cerca';
+                    }
+                    this.editor2D.draw();
+                    if (this.currentViewMode === '3d') this.sync3DScene();
+                    this.saveState();
+                }
+            });
+        }
 
         const propPathMaterial = document.getElementById('prop-path-material');
         if (propPathMaterial) {
@@ -609,6 +709,21 @@ class AetherApp {
                 this.editor2D.draw();
                 if (this.currentViewMode === '3d') this.sync3DScene();
                 this.setHelpText(prefix === 'river_' ? "Río duplicado." : "Camino duplicado.");
+            } else if (this.selectedElement.id && this.selectedElement.id.startsWith('fence_')) {
+                const clone = {
+                    ...this.selectedElement,
+                    id: 'fence_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    x1: this.selectedElement.x1 + 0.5,
+                    y1: this.selectedElement.y1 + 0.5,
+                    x2: this.selectedElement.x2 + 0.5,
+                    y2: this.selectedElement.y2 + 0.5
+                };
+                this.fences.push(clone);
+                this.saveState();
+                this.setSelectedElement(clone);
+                this.editor2D.draw();
+                if (this.currentViewMode === '3d') this.sync3DScene();
+                this.setHelpText("Cerca/Reja duplicada.");
             }
         });
 
@@ -688,8 +803,8 @@ class AetherApp {
         const resizerRight = document.getElementById('resizer-right');
 
         // Cargar anchos guardados en localStorage si existen
-        const savedLeftWidth = localStorage.getItem('aether3d_left_panel_width');
-        const savedRightWidth = localStorage.getItem('aether3d_right_panel_width');
+        const savedLeftWidth = localStorage.getItem('habita3d_left_panel_width');
+        const savedRightWidth = localStorage.getItem('habita3d_right_panel_width');
         
         if (savedLeftWidth) {
             leftPanel.style.width = `${savedLeftWidth}px`;
@@ -718,7 +833,7 @@ class AetherApp {
                     if (newWidth > maxWidth) newWidth = maxWidth;
                     
                     leftPanel.style.width = `${newWidth}px`;
-                    localStorage.setItem('aether3d_left_panel_width', newWidth);
+                    localStorage.setItem('habita3d_left_panel_width', newWidth);
                     
                     // Notificar cambios de tamaño a los editores 2D y 3D
                     this.editor2D.resize();
@@ -756,7 +871,7 @@ class AetherApp {
                     if (newWidth > maxWidth) newWidth = maxWidth;
                     
                     rightPanel.style.width = `${newWidth}px`;
-                    localStorage.setItem('aether3d_right_panel_width', newWidth);
+                    localStorage.setItem('habita3d_right_panel_width', newWidth);
                     
                     // Notificar cambios de tamaño a los editores 2D y 3D
                     this.editor2D.resize();
@@ -780,7 +895,7 @@ class AetherApp {
     }
 
     initTheme() {
-        const savedTheme = localStorage.getItem('aether3d_theme') || 'dark';
+        const savedTheme = localStorage.getItem('habita3d_theme') || 'dark';
         this.theme = savedTheme;
         this.applyTheme(savedTheme);
 
@@ -789,7 +904,7 @@ class AetherApp {
             toggleBtn.addEventListener('click', () => {
                 const nextTheme = this.theme === 'dark' ? 'light' : 'dark';
                 this.theme = nextTheme;
-                localStorage.setItem('aether3d_theme', nextTheme);
+                localStorage.setItem('habita3d_theme', nextTheme);
                 this.applyTheme(nextTheme);
             });
         }
@@ -887,6 +1002,10 @@ class AetherApp {
             case 'room':
                 this.setHelpText("Modo colocar piso interior activo. Haz clic sobre la cuadrícula 2D (dentro de una habitación cerrada) para colocar el marcador de piso.");
                 break;
+            case 'fence':
+                this.editor2D.pathChainStart = null;
+                this.setHelpText("Modo dibujo de cerca/reja activo. Haz clic sobre la cuadrícula para situar los extremos de la cerca. Clic derecho/ESC para terminar.");
+                break;
         }
         
         this.editor2D.draw();
@@ -948,6 +1067,9 @@ class AetherApp {
         const emptyState = document.getElementById('properties-empty-state');
         const formState = document.getElementById('properties-editor');
 
+        const propSuggestedWoodColors = document.getElementById('prop-suggested-wood-colors');
+        if (propSuggestedWoodColors) propSuggestedWoodColors.style.display = 'none';
+
         if (!element) {
             emptyState.style.display = 'block';
             formState.style.display = 'none';
@@ -975,8 +1097,10 @@ class AetherApp {
         // Hide both material dropdowns by default
         const propPathMatGroup = document.getElementById('prop-path-material-group');
         const propRoomMatGroup = document.getElementById('prop-room-material-group');
+        const propFenceMatGroup = document.getElementById('prop-fence-material-group');
         if (propPathMatGroup) propPathMatGroup.style.display = 'none';
         if (propRoomMatGroup) propRoomMatGroup.style.display = 'none';
+        if (propFenceMatGroup) propFenceMatGroup.style.display = 'none';
 
         if (element.catalogId !== undefined) {
             const catalogItem = FURNITURE_CATALOG[element.catalogId];
@@ -1025,6 +1149,56 @@ class AetherApp {
                 propL.value = element.yOffset;
             } else {
                 propL.parentElement.style.display = 'none';
+            }
+
+            document.getElementById('btn-prop-duplicate').style.display = 'flex';
+
+        } else if (element.id && element.id.startsWith('wall_')) {
+            title.textContent = "Pared de Estructura";
+            rotSlider.parentElement.parentElement.style.display = 'none';
+            colorGroup.style.display = 'flex';
+            colorInput.value = element.color || this.wallColor;
+
+            if (propSuggestedWoodColors) {
+                propSuggestedWoodColors.style.display = this.wallMaterial === 'wood' ? 'block' : 'none';
+            }
+
+            propW.parentElement.style.display = 'block';
+            propL.parentElement.style.display = 'none';
+            hContainer.style.display = 'block';
+
+            wLabel.textContent = "Espesor (m)";
+            hLabel.textContent = "Altura (m)";
+
+            propW.value = element.thickness;
+            propH.value = element.height;
+
+            document.getElementById('btn-prop-duplicate').style.display = 'none';
+
+        } else if (element.id && element.id.startsWith('fence_')) {
+            const materialNames = {
+                'wood': 'Cerca de Madera',
+                'metal': 'Reja de Metal',
+                'glass': 'Baranda de Vidrio'
+            };
+            title.textContent = materialNames[element.material || 'wood'] || 'Cerca';
+            
+            rotSlider.parentElement.parentElement.style.display = 'none';
+            colorGroup.style.display = 'none';
+
+            propW.parentElement.style.display = 'block';
+            propL.parentElement.style.display = 'none';
+            hContainer.style.display = 'block';
+
+            wLabel.textContent = "Espesor (m)";
+            hLabel.textContent = "Altura (m)";
+
+            propW.value = element.thickness;
+            propH.value = element.height;
+
+            if (propFenceMatGroup) {
+                propFenceMatGroup.style.display = 'block';
+                document.getElementById('prop-fence-material').value = element.material || 'wood';
             }
 
             document.getElementById('btn-prop-duplicate').style.display = 'flex';
@@ -1124,6 +1298,9 @@ class AetherApp {
         } else if (this.selectedElement.id && this.selectedElement.id.startsWith('marker_')) {
             this.roomMarkers = this.roomMarkers.filter(m => m.id !== id);
             this.setHelpText("Marcador de piso eliminado.");
+        } else if (this.selectedElement.id && this.selectedElement.id.startsWith('fence_')) {
+            this.fences = this.fences.filter(f => f.id !== id);
+            this.setHelpText("Cerca/Reja eliminada.");
         } else if (this.selectedElement.thickness !== undefined) {
             this.walls = this.walls.filter(w => w.id !== id);
             this.openings = this.openings.filter(o => o.wallId !== id);
@@ -1181,7 +1358,8 @@ class AetherApp {
             this.skyBlue,
             this.skyClouds,
             this.groundSize,
-            activeRooms
+            activeRooms,
+            this.fences || []
         );
     }
 
@@ -1242,6 +1420,7 @@ class AetherApp {
                 furniture: this.furniture,
                 openings: this.openings,
                 paths: this.paths,
+                fences: this.fences,
                 activeFloorMaterial: this.activeFloorMaterial,
                 wallColor: this.wallColor,
                 wallMaterial: this.wallMaterial,
@@ -1252,16 +1431,16 @@ class AetherApp {
             };
             
             // Guardar el estado del proyecto específico
-            localStorage.setItem(`aether3d_project_${this.activeProjectId}`, JSON.stringify(data));
+            localStorage.setItem(`habita3d_project_${this.activeProjectId}`, JSON.stringify(data));
             
             // Actualizar metadatos
             const proj = this.projectsMeta.find(p => p.id === this.activeProjectId);
             if (proj) {
                 proj.lastModified = Date.now();
-                localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
+                localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
             }
             
-            localStorage.setItem('aether3d_active_project_id', this.activeProjectId);
+            localStorage.setItem('habita3d_active_project_id', this.activeProjectId);
         } catch (e) {
             console.error("Error al guardar en localStorage", e);
         }
@@ -1270,13 +1449,14 @@ class AetherApp {
     loadFromLocalStorage() {
         if (!this.activeProjectId) return;
         try {
-            const saved = localStorage.getItem(`aether3d_project_${this.activeProjectId}`);
+            const saved = localStorage.getItem(`habita3d_project_${this.activeProjectId}`);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 this.walls = parsed.walls || [];
                 this.furniture = parsed.furniture || [];
                 this.openings = parsed.openings || [];
                 this.paths = parsed.paths || [];
+                this.fences = parsed.fences || [];
                 this.activeFloorMaterial = parsed.activeFloorMaterial || 'oak';
                 this.wallColor = parsed.wallColor || '#f8fafc';
                 this.wallMaterial = parsed.wallMaterial || 'paint';
@@ -1314,8 +1494,8 @@ class AetherApp {
 
     initProjectSystem() {
         try {
-            const metaSaved = localStorage.getItem('aether3d_projects_meta');
-            const activeIdSaved = localStorage.getItem('aether3d_active_project_id');
+            const metaSaved = localStorage.getItem('habita3d_projects_meta');
+            const activeIdSaved = localStorage.getItem('habita3d_active_project_id');
             
             if (metaSaved && activeIdSaved) {
                 this.projectsMeta = JSON.parse(metaSaved);
@@ -1330,7 +1510,7 @@ class AetherApp {
             
             // Si no hay metadatos, intentar migrar el estado clásico de localStorage
             if (this.projectsMeta.length === 0) {
-                const classicSaved = localStorage.getItem('aether3d_save_v1');
+                const classicSaved = localStorage.getItem('habita3d_save_v1');
                 if (classicSaved) {
                     const newId = 'proj_' + Date.now();
                     this.projectsMeta = [{
@@ -1341,9 +1521,9 @@ class AetherApp {
                     this.activeProjectId = newId;
                     
                     // Guardar los datos clásicos en el nuevo formato del proyecto
-                    localStorage.setItem(`aether3d_project_${newId}`, classicSaved);
-                    localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
-                    localStorage.setItem('aether3d_active_project_id', newId);
+                    localStorage.setItem(`habita3d_project_${newId}`, classicSaved);
+                    localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
+                    localStorage.setItem('habita3d_active_project_id', newId);
                 } else {
                     // Si no hay nada, crear un proyecto nuevo vacío
                     const newId = 'proj_' + Date.now();
@@ -1354,8 +1534,8 @@ class AetherApp {
                     }];
                     this.activeProjectId = newId;
                     
-                    localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
-                    localStorage.setItem('aether3d_active_project_id', newId);
+                    localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
+                    localStorage.setItem('habita3d_active_project_id', newId);
                 }
             }
             
@@ -1395,6 +1575,7 @@ class AetherApp {
             this.furniture = [];
             this.openings = [];
             this.paths = [];
+            this.fences = [];
             this.activeFloorMaterial = 'oak';
             this.wallColor = '#f8fafc';
             this.wallMaterial = 'paint';
@@ -1404,8 +1585,8 @@ class AetherApp {
             this.roomMarkers = [];
             
             // Forzar guardado en localStorage y metadatos
-            localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
-            localStorage.setItem('aether3d_active_project_id', this.activeProjectId);
+            localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
+            localStorage.setItem('habita3d_active_project_id', this.activeProjectId);
             this.saveToLocalStorage();
             
             // Sincronizar UI
@@ -1434,7 +1615,7 @@ class AetherApp {
             
             // Cambiar ID activo
             this.activeProjectId = projectId;
-            localStorage.setItem('aether3d_active_project_id', this.activeProjectId);
+            localStorage.setItem('habita3d_active_project_id', this.activeProjectId);
             
             // Cargar datos del nuevo proyecto
             this.setSelectedElement(null);
@@ -1464,7 +1645,7 @@ class AetherApp {
             if (proj) {
                 proj.name = newName;
                 proj.lastModified = Date.now();
-                localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
+                localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
                 this.renderProjectsSidebar();
                 this.setHelpText(`Proyecto renombrado a "${newName}".`);
             }
@@ -1477,8 +1658,8 @@ class AetherApp {
         try {
             // Remover metadatos y datos de localStorage
             this.projectsMeta = this.projectsMeta.filter(p => p.id !== projectId);
-            localStorage.setItem('aether3d_projects_meta', JSON.stringify(this.projectsMeta));
-            localStorage.removeItem(`aether3d_project_${projectId}`);
+            localStorage.setItem('habita3d_projects_meta', JSON.stringify(this.projectsMeta));
+            localStorage.removeItem(`habita3d_project_${projectId}`);
             
             // Si el proyecto eliminado era el activo
             if (this.activeProjectId === projectId) {
@@ -1763,8 +1944,8 @@ function detectRooms(walls) {
 
 // Inicializar la aplicación cuando cargue la ventana
 window.addEventListener('DOMContentLoaded', () => {
-    const app = new AetherApp();
+    const app = new HabitaApp();
     window.app = app;
     app.init();
 });
-export default AetherApp;
+export default HabitaApp;

@@ -1,5 +1,5 @@
 /**
- * AETHER3D - RENDERIZADOR 3D (MODULO ES)
+ * HABITA3D - RENDERIZADOR 3D (MODULO ES)
  * Configura la escena Three.js, luces, sombras, extrusión de paredes y manipulación en 3D
  */
 
@@ -431,12 +431,29 @@ export default class Renderer3D {
                 const ry = Math.random() * 512;
                 ctx.fillRect(rx, ry, 1.5, 1.5);
             }
-        } else if (name === 'wood') {
-            // Revestimiento de Madera
-            ctx.fillStyle = '#b45309';
+        } else if (name === 'wood' || name.startsWith('wood_')) {
+            // Revestimiento de Madera con tono dinámico
+            let baseHex = '#b45309';
+            if (name.startsWith('wood_')) {
+                baseHex = name.substring(5);
+                if (!baseHex.startsWith('#')) {
+                    baseHex = '#' + baseHex;
+                }
+            }
+            
+            const darken = (hex, percent) => {
+                let num = parseInt(hex.replace("#",""), 16),
+                amt = Math.round(2.55 * percent),
+                R = (num >> 16) - amt,
+                G = (num >> 8 & 0x00FF) - amt,
+                B = (num & 0x0000FF) - amt;
+                return "#" + (0x1000000 + (R<0?0:R>255?255:R)*0x10000 + (G<0?0:G>255?255:G)*0x100 + (B<0?0:B>255?255:B)).toString(16).slice(1);
+            };
+
+            ctx.fillStyle = baseHex;
             ctx.fillRect(0, 0, 512, 512);
             
-            ctx.strokeStyle = '#451a03';
+            ctx.strokeStyle = darken(baseHex, 45);
             ctx.lineWidth = 3.5;
             for (let i = 0; i <= 512; i += 40) {
                 ctx.beginPath();
@@ -445,7 +462,7 @@ export default class Renderer3D {
                 ctx.stroke();
             }
             
-            ctx.strokeStyle = '#78350f';
+            ctx.strokeStyle = darken(baseHex, 20);
             ctx.lineWidth = 1.2;
             for (let k = 0; k < 20; k++) {
                 ctx.beginPath();
@@ -459,12 +476,81 @@ export default class Renderer3D {
                 }
                 ctx.stroke();
             }
-            
-            ctx.fillStyle = 'rgba(69, 26, 3, 0.25)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
             for (let i = 0; i < 6; i++) {
                 ctx.beginPath();
                 ctx.arc(Math.random() * 512, Math.random() * 512, 5 + Math.random() * 5, 0, Math.PI * 2);
                 ctx.fill();
+            }
+        } else if (name === 'ceramic') {
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3.5;
+            for (let i = 0; i <= 512; i += 64) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 512);
+                ctx.moveTo(0, i);
+                ctx.lineTo(512, i);
+                ctx.stroke();
+            }
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            for (let i = 0; i < 512; i += 64) {
+                for (let j = 0; j < 512; j += 64) {
+                    ctx.fillRect(i + 2, j + 2, 60, 4);
+                    ctx.fillRect(i + 2, j + 2, 4, 60);
+                }
+            }
+        } else if (name === 'parquet') {
+            ctx.fillStyle = '#b45309';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            const plankW = 128;
+            const plankH = 32;
+            const colors = ['#b45309', '#c2410c', '#d97706', '#92400e', '#7c2d12'];
+            
+            for (let y = 0; y < 512; y += plankH) {
+                const isEven = (y / plankH) % 2 === 0;
+                const offsetX = isEven ? plankW / 2 : 0;
+                for (let x = -plankW; x < 512 + plankW; x += plankW) {
+                    const colorIdx = Math.floor(Math.abs(Math.sin(x * 9.7 + y * 13.3) * 1000)) % colors.length;
+                    ctx.fillStyle = colors[colorIdx];
+                    ctx.fillRect(x + offsetX, y, plankW, plankH);
+                    
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    let gx = x + offsetX + Math.random() * 10;
+                    let gy = y + 2;
+                    ctx.moveTo(gx, gy);
+                    while (gy < y + plankH - 2) {
+                        gx += (Math.random() - 0.5) * 4;
+                        gy += 4;
+                        ctx.lineTo(gx, gy);
+                    }
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.strokeStyle = '#451a03';
+            ctx.lineWidth = 1.5;
+            for (let y = 0; y <= 512; y += plankH) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(512, y);
+                ctx.stroke();
+                
+                const isEven = (y / plankH) % 2 === 0;
+                const offsetX = isEven ? plankW / 2 : 0;
+                for (let x = -plankW; x < 512 + plankW; x += plankW) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + offsetX, y);
+                    ctx.lineTo(x + offsetX, y + plankH);
+                    ctx.stroke();
+                }
             }
         }
 
@@ -472,10 +558,12 @@ export default class Renderer3D {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         
-        if (name === 'tile' || name === 'terracotta' || name === 'cobblestone') {
+        if (name === 'tile' || name === 'terracotta' || name === 'cobblestone' || name === 'ceramic') {
             texture.repeat.set(10, 10);
         } else if (name === 'grass' || name === 'gravel') {
             texture.repeat.set(15, 15);
+        } else if (name === 'parquet') {
+            texture.repeat.set(6, 6);
         } else {
             texture.repeat.set(8, 8);
         }
@@ -486,7 +574,7 @@ export default class Renderer3D {
 
     // --- RECONSTRUCCION DE LA ESCENA
 
-    rebuildScene(walls, openings, furniture, activeFloorMaterial, wallColor, wallMaterial, paths, activeTime, showGrid, showShadows, skyBlue = false, skyClouds = false, groundSize = 30, rooms = []) {
+    rebuildScene(walls, openings, furniture, activeFloorMaterial, wallColor, wallMaterial, paths, activeTime, showGrid, showShadows, skyBlue = false, skyClouds = false, groundSize = 30, rooms = [], fences = []) {
         this.clearGeneratedMeshes();
         
         // Recrear GridHelper dinámicamente según el tamaño seleccionado
@@ -525,6 +613,7 @@ export default class Renderer3D {
         this.buildWalls(walls, openings, wallColor, wallMaterial);
         this.buildOpenings(walls, openings);
         this.buildFurniture(furniture, isNightMode);
+        this.buildFences(fences); // Reconstruir cercas en 3D
         
         this.renderer.render(this.scene, this.camera);
     }
@@ -644,11 +733,11 @@ export default class Renderer3D {
         
         // Ajustar el factor de repetición dinámicamente según el tamaño del terreno
         // para mantener constante la escala visual de los materiales
-        if (floorMaterialName === 'tile' || floorMaterialName === 'terracotta') {
+        if (floorMaterialName === 'tile' || floorMaterialName === 'terracotta' || floorMaterialName === 'ceramic') {
             texture.repeat.set(groundSize / 1.0, groundSize / 1.0); // 1 baldosa por metro
         } else if (floorMaterialName === 'grass') {
             texture.repeat.set(groundSize / 0.5, groundSize / 0.5); // 2 repeticiones por metro
-        } else if (floorMaterialName === 'oak' || floorMaterialName === 'floating') {
+        } else if (floorMaterialName === 'oak' || floorMaterialName === 'floating' || floorMaterialName === 'parquet') {
             texture.repeat.set(groundSize / 2.0, groundSize / 2.0); // Madera realista
         } else {
             texture.repeat.set(groundSize / 3.0, groundSize / 3.0); // Mármol / Alfombra suaves
@@ -658,8 +747,8 @@ export default class Renderer3D {
         
         const floorMat = new THREE.MeshStandardMaterial({
             map: texture,
-            roughness: floorMaterialName === 'marble' ? 0.15 : 0.6,
-            metalness: floorMaterialName === 'marble' ? 0.05 : 0.0
+            roughness: floorMaterialName === 'marble' ? 0.15 : (floorMaterialName === 'ceramic' ? 0.2 : 0.6),
+            metalness: floorMaterialName === 'marble' ? 0.05 : (floorMaterialName === 'ceramic' ? 0.05 : 0.0)
         });
 
         const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -697,8 +786,8 @@ export default class Renderer3D {
             texture.needsUpdate = true;
             
             let rep = 2.0;
-            if (matName === 'oak' || matName === 'floating') rep = 1.2;
-            else if (matName === 'tile' || matName === 'terracotta' || matName === 'cobblestone') rep = 0.8;
+            if (matName === 'oak' || matName === 'floating' || matName === 'parquet') rep = 1.2;
+            else if (matName === 'tile' || matName === 'terracotta' || matName === 'cobblestone' || matName === 'ceramic') rep = 0.8;
             else if (matName === 'concrete') rep = 1.0;
             else if (matName === 'grass') rep = 0.5;
             
@@ -706,8 +795,8 @@ export default class Renderer3D {
             
             const roomFloorMat = new THREE.MeshStandardMaterial({
                 map: texture,
-                roughness: matName === 'marble' ? 0.15 : 0.65,
-                metalness: matName === 'marble' ? 0.05 : 0.0
+                roughness: matName === 'marble' ? 0.15 : (matName === 'ceramic' ? 0.2 : 0.65),
+                metalness: matName === 'marble' ? 0.05 : (matName === 'ceramic' ? 0.05 : 0.0)
             });
             
             const roomFloorMesh = new THREE.Mesh(roomFloorGeo, roomFloorMat);
@@ -869,11 +958,6 @@ export default class Renderer3D {
     }
 
     buildWalls(walls, openings, wallColorHex, wallMaterialName = 'paint') {
-        let baseTexture = null;
-        if (wallMaterialName !== 'paint') {
-            baseTexture = this.getProceduralTexture(wallMaterialName);
-        }
-
         walls.forEach(wall => {
             const dx = wall.x2 - wall.x1;
             const dy = wall.y2 - wall.y1;
@@ -881,17 +965,27 @@ export default class Renderer3D {
             const angle = Math.atan2(dy, dx);
             const ux = dx / wallLength;
             const uy = dy / wallLength;
-
+ 
             const wallOpenings = openings
                 .filter(op => op.wallId === wall.id)
                 .sort((a, b) => a.distance - b.distance);
-
+ 
             let currentDist = 0;
 
+            const activeColor = wall.color || wallColorHex;
+            let baseTexture = null;
+            let activeMatName = wallMaterialName;
+            if (wallMaterialName === 'wood') {
+                activeMatName = 'wood_' + activeColor;
+            }
+            if (wallMaterialName !== 'paint') {
+                baseTexture = this.getProceduralTexture(activeMatName);
+            }
+ 
             const createSegment = (startDist, endDist, bottomY = 0, topY = wall.height) => {
                 const len = endDist - startDist;
                 if (len <= 0.02) return;
-
+ 
                 const height = topY - bottomY;
                 const segGeo = new THREE.BoxGeometry(len, height, wall.thickness);
                 
@@ -921,7 +1015,7 @@ export default class Renderer3D {
                     });
                 } else {
                     segMat = new THREE.MeshStandardMaterial({
-                        color: new THREE.Color(wallColorHex),
+                        color: new THREE.Color(activeColor),
                         roughness: 0.85,
                         metalness: 0.0
                     });
@@ -1087,6 +1181,217 @@ export default class Renderer3D {
         });
     }
 
+    buildFences(fences) {
+        if (!fences) return;
+        
+        fences.forEach(fence => {
+            const dx = fence.x2 - fence.x1;
+            const dy = fence.y2 - fence.y1;
+            const length = Math.hypot(dx, dy);
+            if (length < 0.05) return;
+            
+            const angle = Math.atan2(dy, dx);
+            
+            const height = fence.height || 1.2;
+            const thickness = fence.thickness || 0.15;
+            const type = fence.material || 'wood';
+            
+            const fenceGroup = new THREE.Group();
+            fenceGroup.userData = { isGenerated: true };
+            
+            const mx = fence.x1 + dx / 2;
+            const mz = fence.y1 + dy / 2;
+            fenceGroup.position.set(mx, 0, mz);
+            fenceGroup.rotation.y = -angle;
+            
+            const woodColor = new THREE.Color('#8b5a2b');
+            const metalColor = new THREE.Color('#334155');
+            const steelColor = new THREE.Color('#94a3b8');
+            
+            if (type === 'wood') {
+                const postMat = new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.8 });
+                
+                const postSize = 0.08;
+                const postGeo = new THREE.BoxGeometry(postSize, height, postSize);
+                
+                const numPosts = Math.max(2, Math.round(length / 1.5) + 1);
+                for (let i = 0; i < numPosts; i++) {
+                    const postMesh = new THREE.Mesh(postGeo, postMat);
+                    postMesh.castShadow = true;
+                    postMesh.receiveShadow = true;
+                    const lx = -length / 2 + (i / (numPosts - 1)) * length;
+                    postMesh.position.set(lx, height / 2, 0);
+                    fenceGroup.add(postMesh);
+                }
+                
+                const railSize = 0.04;
+                const railGeo = new THREE.BoxGeometry(length, railSize, railSize);
+                
+                const rail1 = new THREE.Mesh(railGeo, postMat);
+                rail1.castShadow = true;
+                rail1.receiveShadow = true;
+                rail1.position.set(0, height * 0.25, 0);
+                fenceGroup.add(rail1);
+                
+                const rail2 = new THREE.Mesh(railGeo, postMat);
+                rail2.castShadow = true;
+                rail2.receiveShadow = true;
+                rail2.position.set(0, height * 0.75, 0);
+                fenceGroup.add(rail2);
+                
+                const picketW = 0.06;
+                const picketH = height - 0.1;
+                const picketT = 0.015;
+                const picketGeo = new THREE.BoxGeometry(picketW, picketH, picketT);
+                
+                const picketSpacing = 0.16;
+                const numPickets = Math.max(2, Math.round(length / picketSpacing));
+                for (let i = 0; i <= numPickets; i++) {
+                    const lx = -length / 2 + (i / numPickets) * length;
+                    
+                    let tooCloseToPost = false;
+                    for (let j = 0; j < numPosts; j++) {
+                        const px = -length / 2 + (j / (numPosts - 1)) * length;
+                        if (Math.abs(lx - px) < 0.06) {
+                            tooCloseToPost = true;
+                            break;
+                        }
+                    }
+                    if (tooCloseToPost) continue;
+                    
+                    const picketMesh = new THREE.Mesh(picketGeo, postMat);
+                    picketMesh.castShadow = true;
+                    picketMesh.receiveShadow = true;
+                    picketMesh.position.set(lx, picketH / 2 + 0.05, railSize / 2 + picketT / 2);
+                    fenceGroup.add(picketMesh);
+                }
+            } else if (type === 'metal') {
+                const metalMat = new THREE.MeshStandardMaterial({ color: metalColor, roughness: 0.6, metalness: 0.8 });
+                
+                const postRadius = 0.02;
+                const postGeo = new THREE.CylinderGeometry(postRadius, postRadius, height, 8);
+                const numPosts = Math.max(2, Math.round(length / 1.8) + 1);
+                for (let i = 0; i < numPosts; i++) {
+                    const postMesh = new THREE.Mesh(postGeo, metalMat);
+                    postMesh.castShadow = true;
+                    postMesh.receiveShadow = true;
+                    const lx = -length / 2 + (i / (numPosts - 1)) * length;
+                    postMesh.position.set(lx, height / 2, 0);
+                    fenceGroup.add(postMesh);
+                }
+                
+                const railRadius = 0.015;
+                const railGeo = new THREE.CylinderGeometry(railRadius, railRadius, length, 8);
+                
+                const rail1 = new THREE.Mesh(railGeo, metalMat);
+                rail1.castShadow = true;
+                rail1.receiveShadow = true;
+                rail1.rotation.z = Math.PI / 2;
+                rail1.position.set(0, height - 0.05, 0);
+                fenceGroup.add(rail1);
+                
+                const rail2 = new THREE.Mesh(railGeo, metalMat);
+                rail2.castShadow = true;
+                rail2.receiveShadow = true;
+                rail2.rotation.z = Math.PI / 2;
+                rail2.position.set(0, 0.08, 0);
+                fenceGroup.add(rail2);
+                
+                const spindleRadius = 0.007;
+                const spindleH = height - 0.15;
+                const spindleGeo = new THREE.CylinderGeometry(spindleRadius, spindleRadius, spindleH, 6);
+                const spindleSpacing = 0.12;
+                const numSpindles = Math.max(3, Math.round(length / spindleSpacing));
+                for (let i = 0; i <= numSpindles; i++) {
+                    const lx = -length / 2 + (i / numSpindles) * length;
+                    
+                    let tooCloseToPost = false;
+                    for (let j = 0; j < numPosts; j++) {
+                        const px = -length / 2 + (j / (numPosts - 1)) * length;
+                        if (Math.abs(lx - px) < 0.05) {
+                            tooCloseToPost = true;
+                            break;
+                        }
+                    }
+                    if (tooCloseToPost) continue;
+                    
+                    const spindleMesh = new THREE.Mesh(spindleGeo, metalMat);
+                    spindleMesh.castShadow = true;
+                    spindleMesh.receiveShadow = true;
+                    spindleMesh.position.set(lx, spindleH / 2 + 0.08, 0);
+                    fenceGroup.add(spindleMesh);
+                }
+            } else if (type === 'glass') {
+                const steelMat = new THREE.MeshStandardMaterial({ color: steelColor, roughness: 0.3, metalness: 0.9 });
+                const glassMat = new THREE.MeshStandardMaterial({
+                    color: 0xe2e8f0,
+                    transparent: true,
+                    opacity: 0.45,
+                    roughness: 0.1,
+                    metalness: 0.2
+                });
+                
+                const postRadius = 0.02;
+                const postGeo = new THREE.CylinderGeometry(postRadius, postRadius, height, 8);
+                const railRadius = 0.025;
+                const railGeo = new THREE.CylinderGeometry(railRadius, railRadius, length, 8);
+                
+                const rail = new THREE.Mesh(railGeo, steelMat);
+                rail.castShadow = true;
+                rail.receiveShadow = true;
+                rail.rotation.z = Math.PI / 2;
+                rail.position.set(0, height, 0);
+                fenceGroup.add(rail);
+                
+                const numPosts = Math.max(2, Math.round(length / 1.4) + 1);
+                const postPositions = [];
+                for (let i = 0; i < numPosts; i++) {
+                    const postMesh = new THREE.Mesh(postGeo, steelMat);
+                    postMesh.castShadow = true;
+                    postMesh.receiveShadow = true;
+                    const lx = -length / 2 + (i / (numPosts - 1)) * length;
+                    postMesh.position.set(lx, height / 2, 0);
+                    fenceGroup.add(postMesh);
+                    postPositions.push(lx);
+                }
+                
+                const glassH = height - 0.18;
+                const glassThickness = 0.012;
+                
+                for (let i = 0; i < postPositions.length - 1; i++) {
+                    const pStart = postPositions[i];
+                    const pEnd = postPositions[i+1];
+                    const glassW = (pEnd - pStart) - 0.1;
+                    if (glassW <= 0.05) continue;
+                    
+                    const glassGeo = new THREE.BoxGeometry(glassW, glassH, glassThickness);
+                    const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+                    glassMesh.position.set(pStart + (pEnd - pStart) / 2, glassH / 2 + 0.08, 0);
+                    fenceGroup.add(glassMesh);
+                    
+                    const clampGeo = new THREE.BoxGeometry(0.04, 0.04, 0.03);
+                    const cxOffset = glassW / 2 - 0.02;
+                    const cyOffset = glassH / 2 - 0.1;
+                    
+                    const cPositions = [
+                        [pStart + (pEnd - pStart) / 2 - cxOffset, glassH / 2 + 0.08 - cyOffset],
+                        [pStart + (pEnd - pStart) / 2 + cxOffset, glassH / 2 + 0.08 - cyOffset],
+                        [pStart + (pEnd - pStart) / 2 - cxOffset, glassH / 2 + 0.08 + cyOffset],
+                        [pStart + (pEnd - pStart) / 2 + cxOffset, glassH / 2 + 0.08 + cyOffset]
+                    ];
+                    
+                    cPositions.forEach(cp => {
+                        const clampMesh = new THREE.Mesh(clampGeo, steelMat);
+                        clampMesh.position.set(cp[0], cp[1], 0);
+                        fenceGroup.add(clampMesh);
+                    });
+                }
+            }
+            
+            this.scene.add(fenceGroup);
+        });
+    }
+
     // --- RAYCASTING E INTERACCION DE SELECCION/ARRASRE EN 3D ---
 
     onPointerDown(e) {
@@ -1194,7 +1499,7 @@ export default class Renderer3D {
         const dataURL = this.renderer.domElement.toDataURL('image/png');
         
         const link = document.createElement('a');
-        link.download = `Aether3D_Diseno_${Date.now()}.png`;
+        link.download = `Habita3D_Diseno_${Date.now()}.png`;
         link.href = dataURL;
         link.click();
         

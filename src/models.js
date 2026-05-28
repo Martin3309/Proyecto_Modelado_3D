@@ -1,5 +1,5 @@
 /**
- * AETHER3D - CATALOGO Y MODELOS PROCEDURALES (MODULO ES)
+ * HABITA3D - CATALOGO Y MODELOS PROCEDURALES (MODULO ES)
  * Define los metadatos de los muebles y las funciones para construirlos en 3D
  */
 
