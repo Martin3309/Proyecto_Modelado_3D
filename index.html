@@ -218,6 +218,18 @@
                         <button class="color-swatch" style="background-color: #1e3a8a;" data-color="#1e3a8a" title="Azul Marino"></button>
                         <button class="color-swatch" style="background-color: #134e4a;" data-color="#134e4a" title="Verde Bosque"></button>
                     </div>
+                    
+                    <h3 id="wall-color-exterior-title" style="display: none;">Color Exterior (Paredes)</h3>
+                    <div class="color-picker-grid" id="wall-color-exterior-grid" style="display: none;">
+                        <button class="color-swatch" style="background-color: #f8fafc;" data-color="#f8fafc" title="Blanco Hueso"></button>
+                        <button class="color-swatch" style="background-color: #cbd5e1;" data-color="#cbd5e1" title="Gris Claro"></button>
+                        <button class="color-swatch" style="background-color: #64748b;" data-color="#64748b" title="Gris Piedra"></button>
+                        <button class="color-swatch" style="background-color: #0f172a;" data-color="#0f172a" title="Negro Profundo"></button>
+                        <button class="color-swatch active" style="background-color: #fed7aa;" data-color="#fed7aa" title="Salmón Suave"></button>
+                        <button class="color-swatch" style="background-color: #bfdbfe;" data-color="#bfdbfe" title="Azul Pastel"></button>
+                        <button class="color-swatch" style="background-color: #1e3a8a;" data-color="#1e3a8a" title="Azul Marino"></button>
+                        <button class="color-swatch" style="background-color: #134e4a;" data-color="#134e4a" title="Verde Bosque"></button>
+                    </div>
                     <div class="color-picker-grid" id="wall-wood-color-grid" style="display: none;">
                         <button class="color-swatch" style="background-color: #ebd1a9;" data-color="#ebd1a9" title="Pino Natural"></button>
                         <button class="color-swatch" style="background-color: #d4a373;" data-color="#d4a373" title="Roble Claro"></button>
@@ -315,7 +327,7 @@
                         </div>
 
                         <div class="form-group" id="prop-color-group">
-                            <label>Color Personalizado</label>
+                            <label id="prop-color-label">Color Personalizado</label>
                             <input type="color" id="prop-color" value="#ffffff">
                             <div id="prop-suggested-wood-colors" style="display: none; margin-top: 8px;">
                                 <label style="font-size: 11px; opacity: 0.8; margin-bottom: 4px;">Sugerencias Tono Madera</label>
@@ -328,6 +340,16 @@
                                     <button class="color-swatch mini" style="background-color: #8c857b; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" data-color="#8c857b" title="Madera Grisácea"></button>
                                 </div>
                             </div>
+                        </div>
+                        <div class="form-group" id="prop-color-exterior-group" style="display: none;">
+                            <label>Color Exterior</label>
+                            <input type="color" id="prop-color-exterior" value="#ffffff">
+                        </div>
+                        <div class="form-group" id="prop-wall-swap-colors-group" style="display: none; margin-top: 8px;">
+                            <button id="btn-prop-swap-wall-colors" class="action-btn" style="width: 100%; padding: 10px 12px; font-size: 13px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+                                Dar Vuelta a la Pared (Int / Ext)
+                            </button>
                         </div>
 
                         <div class="form-group dimensions-group">

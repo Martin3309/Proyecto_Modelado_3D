@@ -28,6 +28,7 @@ class HabitaApp {
         this.gridSnap = true;
         this.activeFloorMaterial = 'oak';
         this.wallColor = '#f8fafc';
+        this.wallColorExterior = '#fed7aa'; // Color exterior por defecto
         this.wallMaterial = 'paint'; // Textura de pared activa ('paint', 'brick', 'brick_old', 'wood')
         this.activeTime = 'noon';
         this.showGrid3D = true;
@@ -48,6 +49,7 @@ class HabitaApp {
         this.currentViewMode = '2d'; // '2d' o '3d'
         
         this.lastMousePos2D = { x: 0, y: 0 };
+        this.clipboardItem = null; // Portapapeles para copiar, cortar y pegar
 
         // Referencias a los motores
         this.editor2D = null;
@@ -99,6 +101,7 @@ class HabitaApp {
             fences: this.fences,
             activeFloorMaterial: this.activeFloorMaterial,
             wallColor: this.wallColor,
+            wallColorExterior: this.wallColorExterior,
             wallMaterial: this.wallMaterial,
             skyBlue: this.skyBlue,
             skyClouds: this.skyClouds,
@@ -157,6 +160,7 @@ class HabitaApp {
         this.fences = data.fences || [];
         this.activeFloorMaterial = data.activeFloorMaterial || 'oak';
         this.wallColor = data.wallColor || '#f8fafc';
+        this.wallColorExterior = data.wallColorExterior || '#fed7aa';
         this.wallMaterial = data.wallMaterial || 'paint';
         this.skyBlue = data.skyBlue || false;
         this.skyClouds = data.skyClouds || false;
@@ -241,15 +245,19 @@ class HabitaApp {
 
     updateWallColorGridVisibility() {
         const wallColorTitle = document.getElementById('wall-color-title');
+        const wallColorExteriorTitle = document.getElementById('wall-color-exterior-title');
         const wallColorGrid = document.getElementById('wall-color-grid');
+        const wallColorExteriorGrid = document.getElementById('wall-color-exterior-grid');
         const wallWoodColorGrid = document.getElementById('wall-wood-color-grid');
         
         if (!wallColorGrid || !wallWoodColorGrid) return;
         
         if (this.wallMaterial === 'wood') {
             wallColorGrid.style.display = 'none';
+            if (wallColorExteriorGrid) wallColorExteriorGrid.style.display = 'none';
             wallWoodColorGrid.style.display = 'grid';
             if (wallColorTitle) wallColorTitle.textContent = 'Paredes (Tono de Madera)';
+            if (wallColorExteriorTitle) wallColorExteriorTitle.style.display = 'none';
             
             document.querySelectorAll('#wall-wood-color-grid .color-swatch').forEach(swatch => {
                 if (swatch.dataset.color.toLowerCase() === this.wallColor.toLowerCase()) {
@@ -258,10 +266,39 @@ class HabitaApp {
                     swatch.classList.remove('active');
                 }
             });
-        } else {
+        } else if (this.wallMaterial === 'paint') {
             wallColorGrid.style.display = 'grid';
+            if (wallColorExteriorGrid) wallColorExteriorGrid.style.display = 'grid';
             wallWoodColorGrid.style.display = 'none';
-            if (wallColorTitle) wallColorTitle.textContent = 'Paredes (Color)';
+            if (wallColorTitle) wallColorTitle.textContent = 'Color Interior (Paredes)';
+            if (wallColorExteriorTitle) {
+                wallColorExteriorTitle.style.display = 'block';
+                wallColorExteriorTitle.textContent = 'Color Exterior (Paredes)';
+            }
+            
+            document.querySelectorAll('#wall-color-grid .color-swatch').forEach(swatch => {
+                if (swatch.dataset.color.toLowerCase() === this.wallColor.toLowerCase()) {
+                    swatch.classList.add('active');
+                } else {
+                    swatch.classList.remove('active');
+                }
+            });
+            if (wallColorExteriorGrid) {
+                document.querySelectorAll('#wall-color-exterior-grid .color-swatch').forEach(swatch => {
+                    if (swatch.dataset.color.toLowerCase() === this.wallColorExterior.toLowerCase()) {
+                        swatch.classList.add('active');
+                    } else {
+                        swatch.classList.remove('active');
+                    }
+                });
+            }
+        } else {
+            // Ladrillo Rojo o Ladrillo Viejo: mostramos color interior para pintar las paredes por dentro
+            wallColorGrid.style.display = 'grid';
+            if (wallColorExteriorGrid) wallColorExteriorGrid.style.display = 'none';
+            wallWoodColorGrid.style.display = 'none';
+            if (wallColorTitle) wallColorTitle.textContent = 'Color Interior (Paredes)';
+            if (wallColorExteriorTitle) wallColorExteriorTitle.style.display = 'none';
             
             document.querySelectorAll('#wall-color-grid .color-swatch').forEach(swatch => {
                 if (swatch.dataset.color.toLowerCase() === this.wallColor.toLowerCase()) {
@@ -354,6 +391,18 @@ class HabitaApp {
                 swatch.classList.add('active');
                 
                 this.wallColor = swatch.dataset.color;
+                this.saveState();
+                this.editor2D.draw();
+                if (this.currentViewMode === '3d') this.sync3DScene();
+            });
+        });
+
+        document.querySelectorAll('#wall-color-exterior-grid .color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                document.querySelectorAll('#wall-color-exterior-grid .color-swatch').forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+                
+                this.wallColorExterior = swatch.dataset.color;
                 this.saveState();
                 this.editor2D.draw();
                 if (this.currentViewMode === '3d') this.sync3DScene();
@@ -553,6 +602,56 @@ class HabitaApp {
             }
         });
         propColor.addEventListener('change', () => this.saveState());
+
+        const propColorExterior = document.getElementById('prop-color-exterior');
+        if (propColorExterior) {
+            propColorExterior.addEventListener('input', (e) => {
+                const val = e.target.value;
+                if (this.selectedElement && this.selectedElement.id && this.selectedElement.id.startsWith('wall_')) {
+                    this.selectedElement.colorExterior = val;
+                    this.editor2D.draw();
+                    if (this.currentViewMode === '3d') {
+                        this.sync3DScene();
+                    }
+                }
+            });
+            propColorExterior.addEventListener('change', () => this.saveState());
+        }
+
+        const btnSwapWallColors = document.getElementById('btn-prop-swap-wall-colors');
+        if (btnSwapWallColors) {
+            btnSwapWallColors.addEventListener('click', () => {
+                if (this.selectedElement && this.selectedElement.id && this.selectedElement.id.startsWith('wall_')) {
+                    const wall = this.selectedElement;
+                    
+                    // Calcular longitud de la pared
+                    const dx = wall.x2 - wall.x1;
+                    const dy = wall.y2 - wall.y1;
+                    const len = Math.hypot(dx, dy);
+                    
+                    // Intercambiar puntos inicial y final para dar vuelta a la pared
+                    const tempX = wall.x1;
+                    const tempY = wall.y1;
+                    wall.x1 = wall.x2;
+                    wall.y1 = wall.y2;
+                    wall.x2 = tempX;
+                    wall.y2 = tempY;
+                    
+                    // Ajustar las distancias de las aberturas en esta pared para mantener su posición física original
+                    this.openings.forEach(op => {
+                        if (op.wallId === wall.id) {
+                            op.distance = len - op.distance;
+                        }
+                    });
+                    
+                    this.editor2D.draw();
+                    if (this.currentViewMode === '3d') {
+                        this.sync3DScene();
+                    }
+                    this.saveState();
+                }
+            });
+        }
 
         document.querySelectorAll('#prop-suggested-wood-colors .color-swatch.mini').forEach(swatch => {
             swatch.addEventListener('click', () => {
@@ -954,6 +1053,12 @@ class HabitaApp {
         this.currentTool = toolName;
         this.currentFurnitureTool = null;
         
+        if (this.editor2D) {
+            this.editor2D.isSnapActive = false;
+            this.editor2D.snapPosition = null;
+            this.editor2D.snapIndicatorType = null;
+        }
+        
         document.querySelectorAll('[data-tool]').forEach(btn => {
             if (btn.dataset.tool === toolName) {
                 btn.classList.add('active');
@@ -1069,6 +1174,15 @@ class HabitaApp {
 
         const propSuggestedWoodColors = document.getElementById('prop-suggested-wood-colors');
         if (propSuggestedWoodColors) propSuggestedWoodColors.style.display = 'none';
+        
+        const propColorExteriorGroup = document.getElementById('prop-color-exterior-group');
+        if (propColorExteriorGroup) propColorExteriorGroup.style.display = 'none';
+        
+        const propWallSwapColorsGroup = document.getElementById('prop-wall-swap-colors-group');
+        if (propWallSwapColorsGroup) propWallSwapColorsGroup.style.display = 'none';
+        
+        const propColorLabel = document.getElementById('prop-color-label');
+        if (propColorLabel) propColorLabel.textContent = "Color Personalizado";
 
         if (!element) {
             emptyState.style.display = 'block';
@@ -1156,11 +1270,38 @@ class HabitaApp {
         } else if (element.id && element.id.startsWith('wall_')) {
             title.textContent = "Pared de Estructura";
             rotSlider.parentElement.parentElement.style.display = 'none';
+            
+            const propColorLabel = document.getElementById('prop-color-label');
+            const propColorExteriorGroup = document.getElementById('prop-color-exterior-group');
+            const propWallSwapColorsGroup = document.getElementById('prop-wall-swap-colors-group');
+            
+            // Siempre mostramos el selector de color interior para que puedan pintar el interior de las habitaciones
             colorGroup.style.display = 'flex';
-            colorInput.value = element.color || this.wallColor;
+            if (propColorLabel) propColorLabel.textContent = "Color Interior";
+            
+            // Siempre mostramos el botón de dar vuelta a la pared para cualquier tipo de pared
+            if (propWallSwapColorsGroup) propWallSwapColorsGroup.style.display = 'block';
+            
+            if (this.wallMaterial === 'paint') {
+                colorInput.value = element.color || this.wallColor;
+                if (propColorExteriorGroup) {
+                    propColorExteriorGroup.style.display = 'block';
+                    const propColorExterior = document.getElementById('prop-color-exterior');
+                    if (propColorExterior) {
+                        propColorExterior.value = element.colorExterior || this.wallColorExterior || '#fed7aa';
+                    }
+                }
+            } else {
+                if (this.wallMaterial === 'wood') {
+                    colorInput.value = element.color || '#f8fafc'; // Interior blanco por defecto en madera
+                } else {
+                    colorInput.value = element.color || this.wallColor; // Interior color global en ladrillo
+                }
+                if (propColorExteriorGroup) propColorExteriorGroup.style.display = 'none';
+            }
 
             if (propSuggestedWoodColors) {
-                propSuggestedWoodColors.style.display = this.wallMaterial === 'wood' ? 'block' : 'none';
+                propSuggestedWoodColors.style.display = 'none';
             }
 
             propW.parentElement.style.display = 'block';
@@ -1359,7 +1500,8 @@ class HabitaApp {
             this.skyClouds,
             this.groundSize,
             activeRooms,
-            this.fences || []
+            this.fences || [],
+            this.wallColorExterior || '#fed7aa'
         );
     }
 
@@ -1407,6 +1549,156 @@ class HabitaApp {
                 this.editor2D.draw();
                 if (this.currentViewMode === '3d') this.sync3DScene();
             }
+
+            const isModifier = e.ctrlKey || e.metaKey;
+
+            // Copiar (Ctrl+C / Cmd+C)
+            if (isModifier && e.key.toLowerCase() === 'c') {
+                if (this.selectedElement) {
+                    e.preventDefault();
+                    this.clipboardItem = JSON.parse(JSON.stringify(this.selectedElement));
+                    this.setHelpText("Elemento copiado al portapapeles.");
+                }
+            }
+
+            // Cortar (Ctrl+X / Cmd+X)
+            if (isModifier && e.key.toLowerCase() === 'x') {
+                if (this.selectedElement) {
+                    e.preventDefault();
+                    this.clipboardItem = JSON.parse(JSON.stringify(this.selectedElement));
+                    this.deleteSelectedElement();
+                    this.setHelpText("Elemento cortado al portapapeles.");
+                }
+            }
+
+            // Pegar (Ctrl+V / Cmd+V)
+            if (isModifier && e.key.toLowerCase() === 'v') {
+                if (this.clipboardItem) {
+                    e.preventDefault();
+                    const element = this.clipboardItem;
+                    let pastedElement = null;
+
+                    if (element.catalogId !== undefined) {
+                        // Es un mueble
+                        const snapped = this.editor2D.snapPoint(this.lastMousePos2D);
+                        pastedElement = {
+                            id: 'furniture_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            catalogId: element.catalogId,
+                            x: snapped.x,
+                            y: snapped.y,
+                            rotation: element.rotation || 0,
+                            color: element.color,
+                            width: element.width,
+                            height: element.height,
+                            length: element.length
+                        };
+                        this.furniture.push(pastedElement);
+                    } else if (element.wallId !== undefined) {
+                        // Es una abertura (puerta/ventana)
+                        const snap = this.editor2D.getClosestWallProj(this.lastMousePos2D, 0.8);
+                        if (snap) {
+                            pastedElement = {
+                                id: 'opening_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                type: element.type,
+                                wallId: snap.wall.id,
+                                distance: snap.distance,
+                                width: element.width,
+                                height: element.height,
+                                yOffset: element.yOffset
+                            };
+                            this.openings.push(pastedElement);
+                        } else {
+                            this.setHelpText("¡Debes situar el cursor cerca de una pared para pegar puertas o ventanas!");
+                        }
+                    } else if (element.id && element.id.startsWith('wall_')) {
+                        // Es una pared
+                        const dx = element.x2 - element.x1;
+                        const dy = element.y2 - element.y1;
+                        const newX1 = this.lastMousePos2D.x - dx / 2;
+                        const newY1 = this.lastMousePos2D.y - dy / 2;
+                        const newX2 = this.lastMousePos2D.x + dx / 2;
+                        const newY2 = this.lastMousePos2D.y + dy / 2;
+
+                        const finalX1 = this.editor2D.snapToGrid(newX1);
+                        const finalY1 = this.editor2D.snapToGrid(newY1);
+                        const finalX2 = this.editor2D.snapToGrid(newX2);
+                        const finalY2 = this.editor2D.snapToGrid(newY2);
+
+                        // Snapping a nodos cercanos al pegar
+                        const node1 = this.editor2D.getNearbyWallNode({x: finalX1, y: finalY1}, 0.25);
+                        const node2 = this.editor2D.getNearbyWallNode({x: finalX2, y: finalY2}, 0.25);
+
+                        const snappedX1 = node1 ? node1.x : finalX1;
+                        const snappedY1 = node1 ? node1.y : finalY1;
+                        const snappedX2 = node2 ? node2.x : finalX2;
+                        const snappedY2 = node2 ? node2.y : finalY2;
+
+                        pastedElement = {
+                            id: 'wall_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            x1: snappedX1,
+                            y1: snappedY1,
+                            x2: snappedX2,
+                            y2: snappedY2,
+                            thickness: element.thickness,
+                            height: element.height,
+                            color: element.color,
+                            colorExterior: element.colorExterior
+                        };
+                        this.walls.push(pastedElement);
+                    } else if (element.id && (element.id.startsWith('path_') || element.id.startsWith('river_'))) {
+                        // Es un camino o río
+                        const dx = element.x2 - element.x1;
+                        const dy = element.y2 - element.y1;
+                        const snapped = this.editor2D.snapPoint(this.lastMousePos2D);
+                        pastedElement = {
+                            id: (element.id.startsWith('river_') ? 'river_' : 'path_') + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            x1: snapped.x - dx / 2,
+                            y1: snapped.y - dy / 2,
+                            x2: snapped.x + dx / 2,
+                            y2: snapped.y + dy / 2,
+                            thickness: element.thickness,
+                            material: element.material
+                        };
+                        this.paths.push(pastedElement);
+                    } else if (element.id && element.id.startsWith('fence_')) {
+                        // Es una cerca
+                        const dx = element.x2 - element.x1;
+                        const dy = element.y2 - element.y1;
+                        const snapped = this.editor2D.snapPoint(this.lastMousePos2D);
+                        pastedElement = {
+                            id: 'fence_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            x1: snapped.x - dx / 2,
+                            y1: snapped.y - dy / 2,
+                            x2: snapped.x + dx / 2,
+                            y2: snapped.y + dy / 2,
+                            thickness: element.thickness,
+                            height: element.height,
+                            material: element.material
+                        };
+                        this.fences.push(pastedElement);
+                    } else if (element.id && element.id.startsWith('marker_')) {
+                        // Es un marcador de habitación
+                        const snapped = this.editor2D.snapPoint(this.lastMousePos2D);
+                        pastedElement = {
+                            id: 'marker_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            x: snapped.x,
+                            y: snapped.y,
+                            material: element.material
+                        };
+                        this.roomMarkers.push(pastedElement);
+                    }
+
+                    if (pastedElement) {
+                        this.setSelectedElement(pastedElement);
+                        this.saveState();
+                        this.editor2D.draw();
+                        if (this.currentViewMode === '3d') {
+                            this.sync3DScene();
+                        }
+                        this.setHelpText("Elemento pegado.");
+                    }
+                }
+            }
         });
     }
 
@@ -1423,6 +1715,7 @@ class HabitaApp {
                 fences: this.fences,
                 activeFloorMaterial: this.activeFloorMaterial,
                 wallColor: this.wallColor,
+                wallColorExterior: this.wallColorExterior,
                 wallMaterial: this.wallMaterial,
                 skyBlue: this.skyBlue,
                 skyClouds: this.skyClouds,
@@ -1459,6 +1752,7 @@ class HabitaApp {
                 this.fences = parsed.fences || [];
                 this.activeFloorMaterial = parsed.activeFloorMaterial || 'oak';
                 this.wallColor = parsed.wallColor || '#f8fafc';
+                this.wallColorExterior = parsed.wallColorExterior || '#fed7aa';
                 this.wallMaterial = parsed.wallMaterial || 'paint';
                 this.skyBlue = parsed.skyBlue || false;
                 this.skyClouds = parsed.skyClouds || false;
@@ -1474,6 +1768,7 @@ class HabitaApp {
                 this.paths = [];
                 this.activeFloorMaterial = 'oak';
                 this.wallColor = '#f8fafc';
+                this.wallColorExterior = '#fed7aa';
                 this.wallMaterial = 'paint';
                 this.skyBlue = false;
                 this.skyClouds = false;

@@ -574,7 +574,7 @@ export default class Renderer3D {
 
     // --- RECONSTRUCCION DE LA ESCENA
 
-    rebuildScene(walls, openings, furniture, activeFloorMaterial, wallColor, wallMaterial, paths, activeTime, showGrid, showShadows, skyBlue = false, skyClouds = false, groundSize = 30, rooms = [], fences = []) {
+    rebuildScene(walls, openings, furniture, activeFloorMaterial, wallColor, wallMaterial, paths, activeTime, showGrid, showShadows, skyBlue = false, skyClouds = false, groundSize = 30, rooms = [], fences = [], wallColorExteriorHex = '#fed7aa') {
         this.clearGeneratedMeshes();
         
         // Recrear GridHelper dinámicamente según el tamaño seleccionado
@@ -610,7 +610,7 @@ export default class Renderer3D {
             this.buildProceduralClouds(isNightMode);
         }
 
-        this.buildWalls(walls, openings, wallColor, wallMaterial);
+        this.buildWalls(walls, openings, wallColor, wallMaterial, wallColorExteriorHex);
         this.buildOpenings(walls, openings);
         this.buildFurniture(furniture, isNightMode);
         this.buildFences(fences); // Reconstruir cercas en 3D
@@ -957,11 +957,12 @@ export default class Renderer3D {
         });
     }
 
-    buildWalls(walls, openings, wallColorHex, wallMaterialName = 'paint') {
+    buildWalls(walls, openings, wallColorHex, wallMaterialName = 'paint', wallColorExteriorHex = '#fed7aa') {
         walls.forEach(wall => {
             const dx = wall.x2 - wall.x1;
             const dy = wall.y2 - wall.y1;
             const wallLength = Math.hypot(dx, dy);
+            if (wallLength < 0.001) return;
             const angle = Math.atan2(dy, dx);
             const ux = dx / wallLength;
             const uy = dy / wallLength;
@@ -970,13 +971,179 @@ export default class Renderer3D {
                 .filter(op => op.wallId === wall.id)
                 .sort((a, b) => a.distance - b.distance);
  
-            let currentDist = 0;
-
-            const activeColor = wall.color || wallColorHex;
+            // Algoritmo avanzado para calcular el ajuste de límite en los extremos (Butt Joint / dominancia de muros)
+            const getEndpointAdjustment = (w, isP1) => {
+                const P = isP1 ? { x: w.x1, y: w.y1 } : { x: w.x2, y: w.y2 };
+                const TOL = 0.05; // Tolerancia de 5cm para considerar conexión
+                
+                // 1. Buscar conexiones de extremos de otras paredes
+                const endpointConnections = [];
+                for (const other of walls) {
+                    if (other.id === w.id) continue;
+                    const d1 = Math.hypot(other.x1 - P.x, other.y1 - P.y);
+                    const d2 = Math.hypot(other.x2 - P.x, other.y2 - P.y);
+                    if (d1 < TOL || d2 < TOL) {
+                        endpointConnections.push(other);
+                    }
+                }
+                
+                // 2. Si no hay conexiones de extremos directos, comprobar si conecta al cuerpo de otra pared
+                if (endpointConnections.length === 0) {
+                    for (const other of walls) {
+                        if (other.id === w.id) continue;
+                        const odx = other.x2 - other.x1;
+                        const ody = other.y2 - other.y1;
+                        const olen = Math.hypot(odx, ody);
+                        if (olen < 0.001) continue;
+                        const oux = odx / olen;
+                        const ouy = ody / olen;
+                        
+                        const t = (P.x - other.x1) * oux + (P.y - other.y1) * ouy;
+                        if (t >= TOL && t <= olen - TOL) {
+                            const projX = other.x1 + oux * t;
+                            const projY = other.y1 + ouy * t;
+                            const dist = Math.hypot(P.x - projX, P.y - projY);
+                            if (dist < TOL) {
+                                // Conecta al cuerpo de un muro continuo. Retrae por la mitad del grosor de ese muro.
+                                return -other.thickness / 2;
+                            }
+                        }
+                    }
+                    return 0; // Sin conexión detectable
+                }
+                
+                // 3. Conexión de extremos: procesar dominancia y uniones (L, T, Cruz)
+                const connected = [w, ...endpointConnections];
+                
+                // Obtener dirección unitaria apuntando fuera del vértice P para una pared
+                const getDirAway = (wallItem) => {
+                    const isOtherP1 = Math.hypot(wallItem.x1 - P.x, wallItem.y1 - P.y) < TOL;
+                    const dxAway = isOtherP1 ? (wallItem.x2 - wallItem.x1) : (wallItem.x1 - wallItem.x2);
+                    const dyAway = isOtherP1 ? (wallItem.y2 - wallItem.y1) : (wallItem.y1 - wallItem.y2);
+                    const len = Math.hypot(dxAway, dyAway);
+                    return len > 0.001 ? { x: dxAway / len, y: dyAway / len } : { x: 0, y: 0 };
+                };
+                
+                const dirs = connected.map(wallItem => getDirAway(wallItem));
+                
+                // Buscar pares colineales (dot product cercano a -1, es decir, ~180° entre sí)
+                const collinearPairs = [];
+                for (let i = 0; i < connected.length; i++) {
+                    for (let j = i + 1; j < connected.length; j++) {
+                        const dot = dirs[i].x * dirs[j].x + dirs[i].y * dirs[j].y;
+                        if (dot < -0.9) {
+                            collinearPairs.push([i, j]);
+                        }
+                    }
+                }
+                
+                if (connected.length === 2) {
+                    // L-junction (Esquina)
+                    const other = endpointConnections[0];
+                    const wallIsDominant = (w.thickness > other.thickness) || 
+                                           (w.thickness === other.thickness && String(w.id) < String(other.id));
+                    if (wallIsDominant) {
+                        return other.thickness / 2; // Extender
+                    } else {
+                        return -other.thickness / 2; // Retraer
+                    }
+                }
+                
+                if (connected.length === 3) {
+                    // T-junction
+                    if (collinearPairs.length > 0) {
+                        const pairIdxs = collinearPairs[0];
+                        const wallIdx = 0; // 'w' es el primer elemento de la lista connected
+                        
+                        if (pairIdxs.includes(wallIdx)) {
+                            // Pertenece a la pared continua del T-junction. No se altera en el centro de la junta.
+                            return 0;
+                        } else {
+                            // Es el vástago del T-junction. Se retrae por la mitad del grosor de la pared continua.
+                            const collinearWall = connected[pairIdxs[0]];
+                            return -collinearWall.thickness / 2;
+                        }
+                    }
+                    
+                    // Fallback para 3 paredes no alineadas
+                    const sorted = [...connected].sort((a, b) => {
+                        if (b.thickness !== a.thickness) return b.thickness - a.thickness;
+                        return String(a.id).localeCompare(String(b.id));
+                    });
+                    if (sorted[0].id === w.id) {
+                        return sorted[1].thickness / 2; // Dominante extiende
+                    } else {
+                        return -sorted[0].thickness / 2; // Subordinado retrae
+                    }
+                }
+                
+                if (connected.length === 4) {
+                    // Cross-junction (Cruce de 4 muros)
+                    if (collinearPairs.length >= 2) {
+                        const pair1 = collinearPairs[0];
+                        const pair2 = collinearPairs[1];
+                        
+                        const w1a = connected[pair1[0]];
+                        const w1b = connected[pair1[1]];
+                        const w2a = connected[pair2[0]];
+                        const w2b = connected[pair2[1]];
+                        
+                        const t1 = (w1a.thickness + w1b.thickness) / 2;
+                        const t2 = (w2a.thickness + w2b.thickness) / 2;
+                        
+                        let pair1IsDominant = t1 > t2;
+                        if (t1 === t2) {
+                            const minId1 = String(w1a.id) < String(w1b.id) ? w1a.id : w1b.id;
+                            const minId2 = String(w2a.id) < String(w2b.id) ? w2a.id : w2b.id;
+                            pair1IsDominant = String(minId1) < String(minId2);
+                        }
+                        
+                        const wallIdx = 0; // 'w' es el primer elemento
+                        const inPair1 = pair1.includes(wallIdx);
+                        
+                        if (pair1IsDominant) {
+                            return inPair1 ? 0 : -t1 / 2;
+                        } else {
+                            return inPair1 ? -t2 / 2 : 0;
+                        }
+                    }
+                    
+                    // Fallback para 4 paredes
+                    const sorted = [...connected].sort((a, b) => {
+                        if (b.thickness !== a.thickness) return b.thickness - a.thickness;
+                        return String(a.id).localeCompare(String(b.id));
+                    });
+                    if (sorted[0].id === w.id) {
+                        return sorted[1].thickness / 2;
+                    } else {
+                        return -sorted[0].thickness / 2;
+                    }
+                }
+                
+                // Conexiones de mayor orden
+                const sorted = [...connected].sort((a, b) => {
+                    if (b.thickness !== a.thickness) return b.thickness - a.thickness;
+                    return String(a.id).localeCompare(String(b.id));
+                });
+                if (sorted[0].id === w.id) {
+                    return sorted[1].thickness / 2;
+                } else {
+                    return -sorted[0].thickness / 2;
+                }
+            };
+            
+            const adj1 = getEndpointAdjustment(wall, true);
+            const adj2 = getEndpointAdjustment(wall, false);
+            
+            const startLimit = -adj1;
+            const endLimit = wallLength + adj2;
+ 
+            let currentDist = startLimit;
+ 
             let baseTexture = null;
             let activeMatName = wallMaterialName;
             if (wallMaterialName === 'wood') {
-                activeMatName = 'wood_' + activeColor;
+                activeMatName = 'wood_' + wallColorHex;
             }
             if (wallMaterialName !== 'paint') {
                 baseTexture = this.getProceduralTexture(activeMatName);
@@ -1008,44 +1175,85 @@ export default class Renderer3D {
                     }
                     texClone.repeat.set(repX, repY);
                     
-                    segMat = new THREE.MeshStandardMaterial({
+                    // Cara exterior texturada (-z)
+                    const matExtTexture = new THREE.MeshStandardMaterial({
                         map: texClone,
                         roughness: 0.75,
                         metalness: 0.05
                     });
-                } else {
-                    segMat = new THREE.MeshStandardMaterial({
-                        color: new THREE.Color(activeColor),
+                    
+                    // Otras caras pintadas con el color interior (de la pared individual o global)
+                    let activeColorInterior;
+                    if (wallMaterialName === 'wood') {
+                        activeColorInterior = wall.color || '#f8fafc'; // Interior blanco por defecto en madera
+                    } else {
+                        activeColorInterior = wall.color || wallColorHex; // Interior color global en ladrillo
+                    }
+                    
+                    const matInt = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(activeColorInterior),
                         roughness: 0.85,
                         metalness: 0.0
                     });
+                    
+                    segMat = [
+                        matExtTexture, // +x cap (usar textura/color exterior para fundirse en esquinas)
+                        matExtTexture, // -x cap (usar textura/color exterior para fundirse en esquinas)
+                        matInt, // +y cap
+                        matInt, // -y cap
+                        matInt, // +z (interior)
+                        matExtTexture  // -z (exterior)
+                    ];
+                } else {
+                    const activeColorInterior = wall.color || wallColorHex;
+                    const activeColorExterior = wall.colorExterior || wallColorExteriorHex;
+                    
+                    const matInt = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(activeColorInterior),
+                        roughness: 0.85,
+                        metalness: 0.0
+                    });
+                    const matExt = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(activeColorExterior),
+                        roughness: 0.85,
+                        metalness: 0.0
+                    });
+                    
+                    segMat = [
+                        matExt, // +x cap (usar color exterior para fundirse en esquinas)
+                        matExt, // -x cap (usar color exterior para fundirse en esquinas)
+                        matInt, // +y cap
+                        matInt, // -y cap
+                        matInt, // +z (interior)
+                        matExt  // -z (exterior)
+                    ];
                 }
-
+ 
                 const segMesh = new THREE.Mesh(segGeo, segMat);
-
+ 
                 const midDist = startDist + len / 2;
                 const wx = wall.x1 + ux * midDist;
                 const wz = wall.y1 + uy * midDist;
                 const wy = bottomY + (topY - bottomY) / 2;
-
+ 
                 segMesh.position.set(wx, wy, wz);
                 segMesh.rotation.y = -angle;
-
+ 
                 segMesh.castShadow = true;
                 segMesh.receiveShadow = true;
                 segMesh.userData = { isGenerated: true };
-
+ 
                 this.scene.add(segMesh);
             };
-
+ 
             wallOpenings.forEach(op => {
                 const startOp = op.distance - op.width / 2;
                 const endOp = op.distance + op.width / 2;
-
+ 
                 if (startOp > currentDist) {
                     createSegment(currentDist, startOp, 0, wall.height);
                 }
-
+ 
                 if (op.type === 'window') {
                     createSegment(startOp, endOp, 0, op.yOffset);
                     createSegment(startOp, endOp, op.yOffset + op.height, wall.height);
@@ -1054,12 +1262,12 @@ export default class Renderer3D {
                         createSegment(startOp, endOp, op.height, wall.height);
                     }
                 }
-
+ 
                 currentDist = endOp;
             });
-
-            if (currentDist < wallLength) {
-                createSegment(currentDist, wallLength, 0, wall.height);
+ 
+            if (currentDist < endLimit) {
+                createSegment(currentDist, endLimit, 0, wall.height);
             }
         });
     }

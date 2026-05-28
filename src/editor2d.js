@@ -26,12 +26,18 @@ export default class Editor2D {
         this.hasMovedWhilePanning = false;
         
         this.draggedItem = null;
+        this.draggedNode = null;
         this.dragOffset = { x: 0, y: 0 };
         
         // Paredes, caminos y cercas temporales
         this.wallChainStart = null;
         this.pathChainStart = null;
         this.fenceChainStart = null;
+        
+        // Estados para el indicador visual de snap
+        this.isSnapActive = false;
+        this.snapPosition = null;
+        this.snapIndicatorType = null;
         
         this.initEvents();
         this.resize();
@@ -113,8 +119,18 @@ export default class Editor2D {
             }
 
             // Cambiar cursores y actualizar dibujos temporales
-            if (this.app.currentTool === 'wall' && this.wallChainStart) {
-                this.draw(); // Redibujar para mostrar la pared de vista previa
+            if (this.app.currentTool === 'wall') {
+                const { snappedPt, snapType } = this.getWallSnapPoint(mouseWorld, this.wallChainStart);
+                if (snapType) {
+                    this.isSnapActive = true;
+                    this.snapPosition = { x: snappedPt.x, y: snappedPt.y };
+                    this.snapIndicatorType = snapType;
+                } else {
+                    this.isSnapActive = false;
+                    this.snapPosition = null;
+                    this.snapIndicatorType = null;
+                }
+                this.draw();
             } else if (['path', 'river'].includes(this.app.currentTool) && this.pathChainStart) {
                 this.draw(); // Previsualización del camino/río
             } else if (this.app.currentTool === 'fence' && this.fenceChainStart) {
@@ -142,6 +158,10 @@ export default class Editor2D {
             }
             if (this.draggedItem) {
                 this.draggedItem = null;
+                this.draggedNode = null;
+                this.isSnapActive = false;
+                this.snapPosition = null;
+                this.snapIndicatorType = null;
                 this.app.saveState(); // Guardar estado al finalizar arrastre
             }
         });
@@ -180,6 +200,9 @@ export default class Editor2D {
     }
 
     cancelCurrentAction() {
+        this.isSnapActive = false;
+        this.snapPosition = null;
+        this.snapIndicatorType = null;
         if (this.app.currentTool === 'wall' && this.wallChainStart) {
             this.wallChainStart = null;
             this.app.setHelpText("Dibujo de pared cancelado.");
@@ -329,16 +352,30 @@ export default class Editor2D {
     }
 
     handleWallDrawingClick(pt) {
-        const snapped = this.snapPoint(pt);
-        
-        // Intentar unir a extremos de paredes existentes en un radio cercano de 0.2m
-        const snappedToWallNode = this.getNearbyWallNode(pt, 0.2);
-        const finalPt = snappedToWallNode || snapped;
+        const { snappedPt, snapType } = this.getWallSnapPoint(pt, this.wallChainStart);
+        const finalPt = snappedPt;
 
         if (this.wallChainStart === null) {
             // Primer punto de la pared
             this.wallChainStart = finalPt;
             this.app.setHelpText("Haz clic en otro lugar para colocar la pared. Click derecho/ESC para terminar.");
+            
+            // Si el primer punto encajó en algún sitio, activar el indicador de snap brevemente
+            if (snapType) {
+                this.isSnapActive = true;
+                this.snapPosition = { x: finalPt.x, y: finalPt.y };
+                this.snapIndicatorType = snapType;
+                
+                // Desvanecer el indicador de snap tras 800ms
+                setTimeout(() => {
+                    if (this.app.currentTool === 'wall' && this.wallChainStart && this.snapPosition && this.snapPosition.x === finalPt.x && this.snapPosition.y === finalPt.y) {
+                        this.isSnapActive = false;
+                        this.snapPosition = null;
+                        this.snapIndicatorType = null;
+                        this.draw();
+                    }
+                }, 800);
+            }
         } else {
             // Verificar longitud mínima (evitar paredes de 0 metros)
             const dx = finalPt.x - this.wallChainStart.x;
@@ -359,6 +396,23 @@ export default class Editor2D {
                 this.app.walls.push(newWall);
                 this.app.saveState();
                 
+                // Si el segundo punto también encaja, forzar animación de encaje
+                if (snapType) {
+                    this.isSnapActive = true;
+                    this.snapPosition = { x: finalPt.x, y: finalPt.y };
+                    this.snapIndicatorType = snapType;
+                    setTimeout(() => {
+                        this.isSnapActive = false;
+                        this.snapPosition = null;
+                        this.snapIndicatorType = null;
+                        this.draw();
+                    }, 800);
+                } else {
+                    this.isSnapActive = false;
+                    this.snapPosition = null;
+                    this.snapIndicatorType = null;
+                }
+                
                 // Continuar dibujando desde este punto
                 this.wallChainStart = { x: finalPt.x, y: finalPt.y };
             }
@@ -367,6 +421,33 @@ export default class Editor2D {
     }
 
     handleSelectionClick(pt, e) {
+        // Primero, verificar si el usuario hizo clic cerca de un extremo (nodo) de cualquier pared
+        let clickedWallNode = null;
+        let nodeType = null; // 'p1' o 'p2'
+        
+        for (const wall of this.app.walls) {
+            if (Math.hypot(pt.x - wall.x1, pt.y - wall.y1) < 0.25) {
+                clickedWallNode = wall;
+                nodeType = 'p1';
+                break;
+            }
+            if (Math.hypot(pt.x - wall.x2, pt.y - wall.y2) < 0.25) {
+                clickedWallNode = wall;
+                nodeType = 'p2';
+                break;
+            }
+        }
+        
+        if (clickedWallNode) {
+            this.app.setSelectedElement(clickedWallNode);
+            this.draggedItem = clickedWallNode;
+            this.draggedNode = nodeType; // 'p1' o 'p2'
+            this.draw();
+            return;
+        }
+        
+        // Si no se hizo clic en un nodo de pared, usar el comportamiento estándar
+        this.draggedNode = null;
         const item = this.findElementAt(pt);
         this.app.setSelectedElement(item);
         
@@ -470,12 +551,135 @@ export default class Editor2D {
         this.draw();
     }
 
+    getWallSnapPoint(pt, originPt, excludeWallId = null) {
+        let snappedPt = null;
+        let snapType = null; // 'node' | 'perp' | 'body' | 'ortho'
+        
+        // 1. Intentar snappear a un extremo (nodo) de otra pared
+        for (const otherWall of this.app.walls) {
+            if (excludeWallId && otherWall.id === excludeWallId) continue;
+            if (Math.hypot(pt.x - otherWall.x1, pt.y - otherWall.y1) < 0.3) {
+                snappedPt = { x: otherWall.x1, y: otherWall.y1 };
+                snapType = 'node';
+                break;
+            }
+            if (Math.hypot(pt.x - otherWall.x2, pt.y - otherWall.y2) < 0.3) {
+                snappedPt = { x: otherWall.x2, y: otherWall.y2 };
+                snapType = 'node';
+                break;
+            }
+        }
+        
+        // 2. Si no hay extremo cerca, intentar snappear al cuerpo de otra pared
+        if (!snappedPt) {
+            const snap = this.getClosestWallProj(pt, 0.35); // Radio de 35cm para cuerpo de pared
+            if (snap && (!excludeWallId || snap.wall.id !== excludeWallId)) {
+                const otherWall = snap.wall;
+                const wdx = otherWall.x2 - otherWall.x1;
+                const wdy = otherWall.y2 - otherWall.y1;
+                const wlen = Math.hypot(wdx, wdy);
+                
+                if (wlen > 0.001) {
+                    const ux = wdx / wlen;
+                    const uy = wdy / wlen;
+                    
+                    // Si tenemos un punto de origen, intentar snap perpendicular (90 grados)
+                    if (originPt) {
+                        const t = (originPt.x - otherWall.x1) * ux + (originPt.y - otherWall.y1) * uy;
+                        if (t >= 0 && t <= wlen) {
+                            const perpPt = {
+                                x: otherWall.x1 + ux * t,
+                                y: otherWall.y1 + uy * t
+                            };
+                            if (Math.hypot(pt.x - perpPt.x, pt.y - perpPt.y) < 0.5) {
+                                snappedPt = perpPt;
+                                snapType = 'perp';
+                            }
+                        }
+                    }
+                    
+                    if (!snappedPt) {
+                        snappedPt = {
+                            x: otherWall.x1 + ux * snap.distance,
+                            y: otherWall.y1 + uy * snap.distance
+                        };
+                        snapType = 'body';
+                    }
+                }
+            }
+        }
+        
+        // 3. Si no hay snap, aplicar alineación ortogonal a los ejes X/Y (90 grados relativos)
+        if (!snappedPt && originPt) {
+            const dx = pt.x - originPt.x;
+            const dy = pt.y - originPt.y;
+            let currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+            if (currentAngle < 0) currentAngle += 360;
+            
+            const anglesToSnap = [0, 90, 180, 270, 360];
+            let closestAngle = 0;
+            let minDiff = 180;
+            
+            anglesToSnap.forEach(a => {
+                let diff = Math.abs(currentAngle - a);
+                if (diff > 180) diff = 360 - diff;
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestAngle = a;
+                }
+            });
+            
+            if (minDiff < 7) { // 7 grados de tolerancia
+                const length = Math.hypot(dx, dy);
+                const rad = closestAngle * Math.PI / 180;
+                snappedPt = {
+                    x: originPt.x + length * Math.cos(rad),
+                    y: originPt.y + length * Math.sin(rad)
+                };
+                snapType = 'ortho';
+            }
+        }
+        
+        // 4. Si aún no hay snap, usar el snap a rejilla por defecto
+        if (!snappedPt) {
+            snappedPt = this.snapPoint(pt);
+            snapType = null;
+        }
+        
+        return { snappedPt, snapType };
+    }
+
     handleDragging(pt) {
         if (!this.draggedItem) return;
 
         const item = this.draggedItem;
 
-        if (item.x1 !== undefined) {
+        if (this.draggedNode === 'p1' || this.draggedNode === 'p2') {
+            const isP1 = this.draggedNode === 'p1';
+            const other = isP1 ? { x: item.x2, y: item.y2 } : { x: item.x1, y: item.y1 };
+            
+            const { snappedPt, snapType } = this.getWallSnapPoint(pt, other, item.id);
+            
+            if (snapType) {
+                this.isSnapActive = true;
+                this.snapPosition = { x: snappedPt.x, y: snappedPt.y };
+                this.snapIndicatorType = snapType;
+                // Solicitar continuamente redibujado para que la animación del halo pulse
+                requestAnimationFrame(() => this.draw());
+            } else {
+                this.isSnapActive = false;
+                this.snapPosition = null;
+                this.snapIndicatorType = null;
+            }
+            
+            if (isP1) {
+                item.x1 = snappedPt.x;
+                item.y1 = snappedPt.y;
+            } else {
+                item.x2 = snappedPt.x;
+                item.y2 = snappedPt.y;
+            }
+        } else if (item.x1 !== undefined) {
             const newX1 = this.snapToGrid(pt.x + this.dragOffset.x1);
             const newY1 = this.snapToGrid(pt.y + this.dragOffset.y1);
             const newX2 = this.snapToGrid(pt.x + this.dragOffset.x2);
@@ -521,14 +725,39 @@ export default class Editor2D {
                 const dx = wall.x2 - wall.x1;
                 const dy = wall.y2 - wall.y1;
                 const len = Math.hypot(dx, dy);
+                if (len < 0.001) continue;
                 const ux = dx / len;
                 const uy = dy / len;
                 
                 const opX = wall.x1 + ux * op.distance;
                 const opY = wall.y1 + uy * op.distance;
                 
-                if (Math.hypot(pt.x - opX, pt.y - opY) < 0.25) {
-                    return op;
+                // Convertir punto a coordenadas locales de la apertura (lx: a lo largo, ly: perpendicular)
+                const ptdx = pt.x - opX;
+                const ptdy = pt.y - opY;
+                const lx = ptdx * ux + ptdy * uy;
+                const ly = -ptdx * uy + ptdy * ux;
+                
+                const tolerance = 0.25; // 25cm de margen de tolerancia para cliquear
+                const halfW = op.width / 2;
+                const thickness = wall.thickness || 0.15;
+                
+                if (op.type === 'door') {
+                    // La puerta se dibuja abierta en 2D: su panel sobresale perpendicularmente op.width
+                    // y tiene un arco de barrido de radio op.width.
+                    // Cubrimos el barrido de la puerta cubriendo local Y en [-op.width - tolerance, op.width + tolerance]
+                    const inX = (lx >= -halfW - tolerance) && (lx <= halfW + tolerance);
+                    const inY = (ly >= -op.width - tolerance) && (ly <= op.width + tolerance);
+                    if (inX && inY) {
+                        return op;
+                    }
+                } else {
+                    // Ventana u otra apertura estándar
+                    const inX = (lx >= -halfW - tolerance) && (lx <= halfW + tolerance);
+                    const inY = (ly >= -thickness / 2 - tolerance) && (ly <= thickness / 2 + tolerance);
+                    if (inX && inY) {
+                        return op;
+                    }
                 }
             }
         }
@@ -669,6 +898,58 @@ export default class Editor2D {
         this.drawFurniture();
         this.drawToolPreviews();
         this.drawDimensionSpecs();
+        this.drawSnapIndicator();
+    }
+
+    drawSnapIndicator() {
+        if (!this.isSnapActive || !this.snapPosition) return;
+        
+        const screenPt = this.worldToScreen(this.snapPosition.x, this.snapPosition.y);
+        
+        this.ctx.save();
+        
+        // Pulso sutil en base al tiempo
+        const pulse = Math.sin(Date.now() / 120) * 3;
+        const pulseRadius = 14 + pulse;
+        
+        // 1. Halo verde translúcido de encaje
+        this.ctx.beginPath();
+        this.ctx.arc(screenPt.x, screenPt.y, pulseRadius, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'; // Esmeralda translúcido
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = '#10b981';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.arc(screenPt.x, screenPt.y, pulseRadius, 0, Math.PI * 2);
+        this.ctx.stroke();
+        
+        // 2. Punto central sólido
+        this.ctx.beginPath();
+        this.ctx.arc(screenPt.x, screenPt.y, 4, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#059669';
+        this.ctx.fill();
+        
+        // 3. Dibujar símbolo específico
+        if (this.snapIndicatorType === 'perp') {
+            // Símbolo de perpendicularidad (∟) para indicar 90 grados exactos
+            this.ctx.strokeStyle = '#059669';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(screenPt.x + 8, screenPt.y);
+            this.ctx.lineTo(screenPt.x + 8, screenPt.y - 8);
+            this.ctx.lineTo(screenPt.x, screenPt.y - 8);
+            this.ctx.stroke();
+        } else if (this.snapIndicatorType === 'node') {
+            // Doble anillo para extremos
+            this.ctx.strokeStyle = 'rgba(5, 150, 105, 0.5)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.arc(screenPt.x, screenPt.y, pulseRadius - 5, 0, Math.PI * 2);
+            this.ctx.stroke();
+        }
+        
+        this.ctx.restore();
     }
 
     drawRooms() {
@@ -939,13 +1220,69 @@ export default class Editor2D {
             this.ctx.lineCap = 'square';
             this.ctx.stroke();
             
-            this.ctx.beginPath();
-            this.ctx.moveTo(p1.x, p1.y);
-            this.ctx.lineTo(p2.x, p2.y);
-            this.ctx.strokeStyle = wallBodyColor;
-            this.ctx.lineWidth = (wall.thickness - 0.04) * this.zoom;
-            this.ctx.lineCap = 'square';
-            this.ctx.stroke();
+            if (!isSelected) {
+                let colInt;
+                let colExt;
+                
+                if (this.app.wallMaterial === 'paint') {
+                    colInt = wall.color || this.app.wallColor;
+                    colExt = wall.colorExterior || this.app.wallColorExterior || '#fed7aa';
+                } else if (this.app.wallMaterial === 'brick') {
+                    colInt = wall.color || this.app.wallColor;
+                    colExt = '#b91c1c'; // Rojo ladrillo
+                } else if (this.app.wallMaterial === 'brick_old') {
+                    colInt = wall.color || this.app.wallColor;
+                    colExt = '#7c2d12'; // Ladrillo viejo
+                } else if (this.app.wallMaterial === 'wood') {
+                    colInt = wall.color || '#f8fafc'; // Blanco hueso por defecto para interior en paredes de madera
+                    colExt = this.app.wallColor || '#ebd1a9'; // Tono de madera seleccionado
+                }
+                
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const len = Math.hypot(dx, dy);
+                
+                if (len > 0.01) {
+                    const nx = -dy / len;
+                    const ny = dx / len;
+                    const halfWidth = (wall.thickness - 0.04) * this.zoom / 2;
+                    const offset = halfWidth / 2;
+                    
+                    // Lado Interior (+z local)
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(p1.x + nx * offset, p1.y + ny * offset);
+                    this.ctx.lineTo(p2.x + nx * offset, p2.y + ny * offset);
+                    this.ctx.strokeStyle = colInt;
+                    this.ctx.lineWidth = halfWidth;
+                    this.ctx.lineCap = 'square';
+                    this.ctx.stroke();
+                    
+                    // Lado Exterior (-z local)
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(p1.x - nx * offset, p1.y - ny * offset);
+                    this.ctx.lineTo(p2.x - nx * offset, p2.y - ny * offset);
+                    this.ctx.strokeStyle = colExt;
+                    this.ctx.lineWidth = halfWidth;
+                    this.ctx.lineCap = 'square';
+                    this.ctx.stroke();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(p1.x, p1.y);
+                    this.ctx.lineTo(p2.x, p2.y);
+                    this.ctx.strokeStyle = colInt;
+                    this.ctx.lineWidth = (wall.thickness - 0.04) * this.zoom;
+                    this.ctx.lineCap = 'square';
+                    this.ctx.stroke();
+                }
+            } else {
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.strokeStyle = wallBodyColor;
+                this.ctx.lineWidth = (wall.thickness - 0.04) * this.zoom;
+                this.ctx.lineCap = 'square';
+                this.ctx.stroke();
+            }
             
             if (isSelected) {
                 this.ctx.fillStyle = '#60a5fa';
@@ -1206,11 +1543,9 @@ export default class Editor2D {
 
         if (this.app.currentTool === 'wall' && this.wallChainStart && mousePos) {
             const p1 = this.worldToScreen(this.wallChainStart.x, this.wallChainStart.y);
-            const snappedMouse = this.snapPoint(mousePos);
             
-            const snappedToNode = this.getNearbyWallNode(mousePos, 0.2);
-            const finalMouse = snappedToNode || snappedMouse;
-            const p2 = this.worldToScreen(finalMouse.x, finalMouse.y);
+            const { snappedPt } = this.getWallSnapPoint(mousePos, this.wallChainStart);
+            const p2 = this.worldToScreen(snappedPt.x, snappedPt.y);
             
             this.ctx.beginPath();
             this.ctx.moveTo(p1.x, p1.y);
@@ -1220,7 +1555,7 @@ export default class Editor2D {
             this.ctx.lineCap = 'square';
             this.ctx.stroke();
 
-            const len = Math.hypot(finalMouse.x - this.wallChainStart.x, finalMouse.y - this.wallChainStart.y);
+            const len = Math.hypot(snappedPt.x - this.wallChainStart.x, snappedPt.y - this.wallChainStart.y);
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
             
