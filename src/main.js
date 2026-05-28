@@ -1057,6 +1057,7 @@ class HabitaApp {
             this.editor2D.isSnapActive = false;
             this.editor2D.snapPosition = null;
             this.editor2D.snapIndicatorType = null;
+            this.editor2D.hoveredItem = null;
         }
         
         document.querySelectorAll('[data-tool]').forEach(btn => {

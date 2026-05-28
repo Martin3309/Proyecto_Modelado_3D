@@ -31,7 +31,11 @@ export default class Renderer3D {
         
         // Almacenamiento de objetos interactivos
         this.furnitureMeshes = [];
+        this.openingMeshes = [];
         this.proceduralTextures = {}; // Cache de texturas generadas
+        
+        // Elemento resaltado en 3D (hover)
+        this.hoveredObject3D = null;
         
         this.init();
     }
@@ -86,6 +90,7 @@ export default class Renderer3D {
         this.renderer.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e));
         this.renderer.domElement.addEventListener('pointermove', (e) => this.onPointerMove(e));
         this.renderer.domElement.addEventListener('pointerup', () => this.onPointerUp());
+        this.renderer.domElement.addEventListener('pointerleave', () => this.clearHoverHighlight());
 
         // 8. Loop de Animación
         this.animate();
@@ -127,6 +132,37 @@ export default class Renderer3D {
         requestAnimationFrame(() => this.animate());
         
         this.controls.update();
+        
+        // Efecto de pulso en el BoxHelper, GlowMesh y emisividad en 3D
+        if (this.hoveredObject3D) {
+            const time = Date.now();
+            const pulseOutline = 0.6 + Math.sin(time / 120) * 0.25; // 0.35 a 0.85
+            const pulseOpacity = 0.12 + Math.sin(time / 120) * 0.08; // 0.04 a 0.20
+            const pulseScale = 1.0 + Math.sin(time / 120) * 0.012; // 0.988 a 1.012
+            const pulseEmissive = 0.22 + Math.sin(time / 120) * 0.15; // 0.07 a 0.37
+            
+            if (this.hoveredObject3D.userData.hoverHelper) {
+                this.hoveredObject3D.userData.hoverHelper.material.opacity = pulseOutline;
+            }
+            
+            if (this.hoveredObject3D.userData.glowMesh) {
+                this.hoveredObject3D.userData.glowMesh.material.opacity = pulseOpacity;
+                this.hoveredObject3D.userData.glowMesh.scale.set(pulseScale, pulseScale, pulseScale);
+            }
+            
+            // Pulsar intensidad de emisividad
+            this.hoveredObject3D.traverse(node => {
+                if (node.isMesh && node.material) {
+                    const materials = Array.isArray(node.material) ? node.material : [node.material];
+                    materials.forEach(mat => {
+                        if (mat.emissive !== undefined && mat.userData.originalEmissive !== undefined) {
+                            mat.emissiveIntensity = pulseEmissive;
+                        }
+                    });
+                }
+            });
+        }
+        
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -640,6 +676,7 @@ export default class Renderer3D {
         });
 
         this.furnitureMeshes = [];
+        this.openingMeshes = [];
         this.selectedObject3D = null;
     }
 
@@ -1290,7 +1327,15 @@ export default class Renderer3D {
             const group = new THREE.Group();
             group.position.set(ox, 0, oz);
             group.rotation.y = -angle;
-            group.userData = { isOpening: true, openingId: op.id };
+            
+            // Guardar dimensiones en userData para el volumen de brillo en 3D
+            group.userData = {
+                isOpening: true,
+                openingId: op.id,
+                width: op.width,
+                height: op.type === 'window' ? (op.yOffset + op.height) : op.height,
+                length: wall.thickness * 1.05
+            };
 
             const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4 });
             const glassMat = new THREE.MeshStandardMaterial({
@@ -1354,6 +1399,7 @@ export default class Renderer3D {
             }
 
             this.scene.add(group);
+            this.openingMeshes.push(group);
         });
     }
 
@@ -1371,9 +1417,13 @@ export default class Renderer3D {
             mesh.position.set(furn.x, 0, furn.y);
             mesh.rotation.y = -furn.rotation * Math.PI / 180;
             
+            // Guardar dimensiones en userData para el volumen de brillo en 3D
             mesh.userData = {
                 isFurniture: true,
-                furnitureId: furn.id
+                furnitureId: furn.id,
+                width: furn.width,
+                height: furn.height,
+                length: furn.length
             };
 
             mesh.traverse(child => {
@@ -1611,11 +1661,12 @@ export default class Renderer3D {
 
         this.raycaster.setFromCamera(this.mouse, this.camera);
         
-        const intersects = this.raycaster.intersectObjects(this.furnitureMeshes, true);
+        const interactiveObjects = [...this.furnitureMeshes, ...this.openingMeshes];
+        const intersects = this.raycaster.intersectObjects(interactiveObjects, true);
         
         if (intersects.length > 0) {
             let parentNode = intersects[0].object;
-            while (parentNode && !parentNode.userData.isFurniture) {
+            while (parentNode && !parentNode.userData.isFurniture && !parentNode.userData.isOpening) {
                 parentNode = parentNode.parent;
             }
             
@@ -1636,9 +1687,26 @@ export default class Renderer3D {
                         z: parentNode.position.z - intersection.z
                     };
                 }
+            } else if (parentNode && parentNode.userData.isOpening) {
+                const opId = parentNode.userData.openingId;
+                const opItem = this.app.openings.find(o => o.id === opId);
+                if (opItem) {
+                    this.app.setSelectedElement(opItem);
+                    this.selectedObject3D = parentNode;
+                    this.isDragging = true;
+                    this.controls.enabled = false;
+                    
+                    const intersection = new THREE.Vector3();
+                    this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
+                    this.dragOffset = {
+                        x: parentNode.position.x - intersection.x,
+                        z: parentNode.position.z - intersection.z
+                    };
+                }
             }
         } else {
             this.app.setSelectedElement(null);
+            this.clearHoverHighlight();
         }
         
         this.app.editor2D.draw();
@@ -1659,29 +1727,87 @@ export default class Renderer3D {
                 let nx = intersection.x + this.dragOffset.x;
                 let nz = intersection.z + this.dragOffset.z;
                 
-                if (this.app.gridSnap) {
-                    nx = Math.round(nx / 0.25) * 0.25;
-                    nz = Math.round(nz / 0.25) * 0.25;
+                if (this.selectedObject3D.userData.isFurniture) {
+                    if (this.app.gridSnap) {
+                        nx = Math.round(nx / 0.25) * 0.25;
+                        nz = Math.round(nz / 0.25) * 0.25;
+                    }
+                    
+                    this.selectedObject3D.position.x = nx;
+                    this.selectedObject3D.position.z = nz;
+                    
+                    const furnId = this.selectedObject3D.userData.furnitureId;
+                    const furnItem = this.app.furniture.find(f => f.id === furnId);
+                    if (furnItem) {
+                        furnItem.x = nx;
+                        furnItem.y = nz;
+                        this.app.updatePropertiesPanel();
+                    }
+                } else if (this.selectedObject3D.userData.isOpening) {
+                    const pt = { x: nx, y: nz };
+                    // Deslizar aberturas a lo largo de las paredes
+                    const snap = this.app.editor2D.getClosestWallProj(pt, 5.0); // Rango de alcance generoso para arrastrar
+                    if (snap) {
+                        const opId = this.selectedObject3D.userData.openingId;
+                        const opItem = this.app.openings.find(o => o.id === opId);
+                        if (opItem) {
+                            opItem.wallId = snap.wall.id;
+                            
+                            const wallLen = Math.hypot(snap.wall.x2 - snap.wall.x1, snap.wall.y2 - snap.wall.y1);
+                            let dist = snap.distance;
+                            if (this.app.gridSnap) {
+                                dist = Math.round(dist / 0.25) * 0.25;
+                            }
+                            
+                            opItem.distance = Math.max(opItem.width / 2, Math.min(wallLen - opItem.width / 2, dist));
+                            
+                            // Posicionar de inmediato en 3D para feedback visual suave
+                            const dx = snap.wall.x2 - snap.wall.x1;
+                            const dy = snap.wall.y2 - snap.wall.y1;
+                            const angle = Math.atan2(dy, dx);
+                            const ux = dx / wallLen;
+                            const uy = dy / wallLen;
+                            
+                            const ox = snap.wall.x1 + ux * opItem.distance;
+                            const oz = snap.wall.y1 + uy * opItem.distance;
+                            
+                            this.selectedObject3D.position.set(ox, 0, oz);
+                            this.selectedObject3D.rotation.y = -angle;
+                            
+                            this.app.updatePropertiesPanel();
+                        }
+                    }
                 }
                 
-                this.selectedObject3D.position.x = nx;
-                this.selectedObject3D.position.z = nz;
-                
-                const furnId = this.selectedObject3D.userData.furnitureId;
-                const furnItem = this.app.furniture.find(f => f.id === furnId);
-                if (furnItem) {
-                    furnItem.x = nx;
-                    furnItem.y = nz;
-                    this.app.updatePropertiesPanel();
+                // Actualizar helper de hover si existe
+                if (this.selectedObject3D.userData.hoverHelper) {
+                    this.selectedObject3D.userData.hoverHelper.update();
                 }
             }
         } else {
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.furnitureMeshes, true);
+            const interactiveObjects = [...this.furnitureMeshes, ...this.openingMeshes];
+            const intersects = this.raycaster.intersectObjects(interactiveObjects, true);
             if (intersects.length > 0) {
                 this.renderer.domElement.style.cursor = 'pointer';
+                
+                let parentNode = intersects[0].object;
+                while (parentNode && !parentNode.userData.isFurniture && !parentNode.userData.isOpening) {
+                    parentNode = parentNode.parent;
+                }
+                
+                if (parentNode && (parentNode.userData.isFurniture || parentNode.userData.isOpening)) {
+                    if (this.hoveredObject3D !== parentNode) {
+                        this.clearHoverHighlight();
+                        this.hoveredObject3D = parentNode;
+                        this.highlightObject3D(this.hoveredObject3D, true);
+                    }
+                } else {
+                    this.clearHoverHighlight();
+                }
             } else {
                 this.renderer.domElement.style.cursor = 'default';
+                this.clearHoverHighlight();
             }
         }
     }
@@ -1690,11 +1816,123 @@ export default class Renderer3D {
         if (this.app.currentViewMode !== '3d') return;
         
         if (this.isDragging) {
+            const wasOpening = this.selectedObject3D && this.selectedObject3D.userData.isOpening;
             this.isDragging = false;
             this.selectedObject3D = null;
             this.controls.enabled = true;
             this.app.saveState();
+            
+            if (wasOpening) {
+                // Reconstruir la escena para actualizar las aberturas (huecos) en los muros
+                this.app.sync3DScene();
+            }
             this.app.editor2D.draw();
+        }
+    }
+
+    highlightObject3D(object, enabled) {
+        if (!object) return;
+        
+        const isLight = this.app.theme === 'light';
+        const highlightColorHex = isLight ? 0xdb2777 : 0xd946ef;
+        
+        if (enabled) {
+            // 1. Crear BoxHelper si no existe
+            if (!object.userData.hoverHelper) {
+                const helper = new THREE.BoxHelper(object, highlightColorHex);
+                helper.material.depthTest = false; // Dibujar encima de todo
+                helper.material.transparent = true;
+                helper.material.opacity = 0.8;
+                helper.userData = { isGenerated: true }; // Para limpieza automática en rebuildScene
+                
+                object.userData.hoverHelper = helper;
+                this.scene.add(helper);
+            }
+            
+            // 2. Crear GlowMesh (Volumen semi-transparente) si no existe
+            if (!object.userData.glowMesh) {
+                const w = object.userData.width || 1;
+                const h = object.userData.height || 1;
+                const l = object.userData.length || 1;
+                
+                const glowGeo = new THREE.BoxGeometry(w + 0.08, h + 0.08, l + 0.08);
+                const glowMat = new THREE.MeshBasicMaterial({
+                    color: highlightColorHex,
+                    transparent: true,
+                    opacity: 0.15,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide
+                });
+                
+                const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+                // Centrar en el origen del modelo (la base en Y=0)
+                glowMesh.position.set(0, h / 2, 0);
+                glowMesh.userData = { isGenerated: true };
+                
+                object.add(glowMesh);
+                object.userData.glowMesh = glowMesh;
+            }
+            
+            // 3. Tintar materiales usando emisividad
+            object.traverse(node => {
+                if (node.isMesh && node.material) {
+                    const materials = Array.isArray(node.material) ? node.material : [node.material];
+                    materials.forEach(mat => {
+                        if (mat.emissive !== undefined) {
+                            if (mat.userData.originalEmissive === undefined) {
+                                mat.userData.originalEmissive = mat.emissive.getHex();
+                            }
+                            // Color emisivo base de hover
+                            mat.emissive.setHex(highlightColorHex);
+                            
+                            if (mat.userData.originalEmissiveIntensity === undefined) {
+                                mat.userData.originalEmissiveIntensity = mat.emissiveIntensity !== undefined ? mat.emissiveIntensity : 1.0;
+                            }
+                        }
+                    });
+                }
+            });
+        } else {
+            // 1. Quitar BoxHelper
+            if (object.userData.hoverHelper) {
+                this.scene.remove(object.userData.hoverHelper);
+                object.userData.hoverHelper.geometry.dispose();
+                object.userData.hoverHelper.material.dispose();
+                delete object.userData.hoverHelper;
+            }
+            
+            // 2. Quitar GlowMesh
+            if (object.userData.glowMesh) {
+                object.remove(object.userData.glowMesh);
+                object.userData.glowMesh.geometry.dispose();
+                object.userData.glowMesh.material.dispose();
+                delete object.userData.glowMesh;
+            }
+            
+            // 3. Restaurar emisividad
+            object.traverse(node => {
+                if (node.isMesh && node.material) {
+                    const materials = Array.isArray(node.material) ? node.material : [node.material];
+                    materials.forEach(mat => {
+                        if (mat.emissive !== undefined && mat.userData.originalEmissive !== undefined) {
+                            mat.emissive.setHex(mat.userData.originalEmissive);
+                            delete mat.userData.originalEmissive;
+                        }
+                        if (mat.emissiveIntensity !== undefined && mat.userData.originalEmissiveIntensity !== undefined) {
+                            mat.emissiveIntensity = mat.userData.originalEmissiveIntensity;
+                            delete mat.userData.originalEmissiveIntensity;
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    clearHoverHighlight() {
+        if (this.hoveredObject3D) {
+            this.highlightObject3D(this.hoveredObject3D, false);
+            this.hoveredObject3D = null;
         }
     }
 

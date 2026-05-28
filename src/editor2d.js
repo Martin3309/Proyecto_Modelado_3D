@@ -39,6 +39,9 @@ export default class Editor2D {
         this.snapPosition = null;
         this.snapIndicatorType = null;
         
+        // Elemento resaltado al pasar el ratón (hover)
+        this.hoveredItem = null;
+        
         this.initEvents();
         this.resize();
     }
@@ -95,6 +98,14 @@ export default class Editor2D {
             }
         });
 
+        // Mouse Leave Canvas
+        this.canvas.addEventListener('mouseleave', () => {
+            if (this.hoveredItem) {
+                this.hoveredItem = null;
+                this.draw();
+            }
+        });
+
         // Mouse Move
         this.canvas.addEventListener('mousemove', (e) => {
             const mouseWorld = this.getMouseWorld(e);
@@ -144,6 +155,16 @@ export default class Editor2D {
                     this.canvas.style.cursor = 'pointer';
                 } else {
                     this.canvas.style.cursor = 'default';
+                }
+                
+                if (this.hoveredItem !== hovered) {
+                    this.hoveredItem = hovered;
+                    this.draw();
+                }
+                
+                // Si hay un elemento resaltado (hover), solicitar animación continua para el pulso del brillo
+                if (this.hoveredItem) {
+                    requestAnimationFrame(() => this.draw());
                 }
             } else if (this.app.currentTool === 'pan') {
                 this.canvas.style.cursor = this.isPanning ? 'grabbing' : 'grab';
@@ -203,6 +224,7 @@ export default class Editor2D {
         this.isSnapActive = false;
         this.snapPosition = null;
         this.snapIndicatorType = null;
+        this.hoveredItem = null;
         if (this.app.currentTool === 'wall' && this.wallChainStart) {
             this.wallChainStart = null;
             this.app.setHelpText("Dibujo de pared cancelado.");
@@ -979,20 +1001,33 @@ export default class Editor2D {
 
             const p = this.worldToScreen(marker.x, marker.y);
 
-            // Círculo indicador de selección
-            if (isSelected) {
+            const isHovered = this.hoveredItem === marker;
+            const isLight = this.app.theme === 'light';
+            
+            // Círculo indicador de selección o hover
+            if (isSelected || isHovered) {
+                this.ctx.save();
                 this.ctx.beginPath();
                 this.ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
-                this.ctx.strokeStyle = '#3b82f6';
-                this.ctx.lineWidth = 1.5;
+                
+                if (isHovered && !isSelected) {
+                    this.ctx.shadowColor = isLight ? '#db2777' : '#d946ef';
+                    this.ctx.shadowBlur = 12 + Math.sin(Date.now() / 120) * 4;
+                    this.ctx.strokeStyle = isLight ? '#db2777' : '#d946ef';
+                    this.ctx.lineWidth = 2.0;
+                } else {
+                    this.ctx.strokeStyle = '#3b82f6';
+                    this.ctx.lineWidth = 1.5;
+                }
+                
                 this.ctx.setLineDash([4, 4]);
                 this.ctx.stroke();
-                this.ctx.setLineDash([]);
+                this.ctx.restore();
                 
                 // Punto central destacado
                 this.ctx.beginPath();
                 this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-                this.ctx.fillStyle = '#60a5fa';
+                this.ctx.fillStyle = isSelected ? '#60a5fa' : (isLight ? '#db2777' : '#d946ef');
                 this.ctx.fill();
             } else {
                 // Punto central sutil
@@ -1006,14 +1041,13 @@ export default class Editor2D {
             this.ctx.font = 'bold 10px sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'bottom';
-            this.ctx.fillStyle = isSelected ? '#3b82f6' : '#22c55e';
+            this.ctx.fillStyle = isSelected ? '#3b82f6' : (isHovered ? (isLight ? '#db2777' : '#d946ef') : '#22c55e');
             this.ctx.fillText(`Piso: ${materialNames[marker.material || 'oak'] || 'Roble'}`, p.x, p.y - 6);
 
             // Área de la habitación o estado abierto
-            const isLight = this.app.theme === 'light';
             this.ctx.font = '9px sans-serif';
             this.ctx.textBaseline = 'top';
-            this.ctx.fillStyle = isSelected ? '#3b82f6' : (isLight ? '#475569' : 'rgba(255, 255, 255, 0.6)');
+            this.ctx.fillStyle = isSelected ? '#3b82f6' : (isHovered ? (isLight ? '#db2777' : '#d946ef') : (isLight ? '#475569' : 'rgba(255, 255, 255, 0.6)'));
             
             if (parentRoom) {
                 this.ctx.fillText(`${parentRoom.area.toFixed(1)} m²`, p.x, p.y + 6);
@@ -1422,16 +1456,23 @@ export default class Editor2D {
             this.ctx.rotate(angle);
             
             const isSelected = this.app.selectedElement === op;
+            const isHovered = this.hoveredItem === op;
             
             const isLight = this.app.theme === 'light';
             const bgFillColor = isLight ? '#f1f5f9' : '#080b11';
 
+            if (isHovered && !isSelected) {
+                // Brillo / Glow para hover (magenta esmerilado que pulsa)
+                this.ctx.shadowColor = isLight ? '#db2777' : '#d946ef';
+                this.ctx.shadowBlur = 12 + Math.sin(Date.now() / 120) * 4;
+            }
+            
             if (op.type === 'door') {
                 this.ctx.fillStyle = bgFillColor;
                 this.ctx.fillRect(-halfW, -wall.thickness * this.zoom / 2 - 1, halfW * 2, wall.thickness * this.zoom + 2);
                 
-                this.ctx.strokeStyle = isSelected ? '#3b82f6' : (isLight ? '#0f172a' : '#cbd5e1');
-                this.ctx.lineWidth = 2;
+                this.ctx.strokeStyle = isSelected ? '#3b82f6' : (isHovered ? (isLight ? '#db2777' : '#d946ef') : (isLight ? '#0f172a' : '#cbd5e1'));
+                this.ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
                 this.ctx.beginPath();
                 this.ctx.moveTo(-halfW, -wall.thickness * this.zoom / 2);
                 this.ctx.lineTo(-halfW, wall.thickness * this.zoom / 2);
@@ -1444,7 +1485,7 @@ export default class Editor2D {
                 this.ctx.lineTo(-halfW, -halfW * 2);
                 this.ctx.stroke();
                 
-                this.ctx.strokeStyle = isSelected ? 'rgba(59, 130, 246, 0.4)' : (isLight ? 'rgba(15, 23, 42, 0.2)' : 'rgba(203, 213, 225, 0.3)');
+                this.ctx.strokeStyle = isSelected ? 'rgba(59, 130, 246, 0.4)' : (isHovered ? (isLight ? 'rgba(219, 39, 119, 0.5)' : 'rgba(217, 70, 239, 0.5)') : (isLight ? 'rgba(15, 23, 42, 0.2)' : 'rgba(203, 213, 225, 0.3)'));
                 this.ctx.lineWidth = 1;
                 this.ctx.setLineDash([3, 3]);
                 this.ctx.beginPath();
@@ -1455,11 +1496,11 @@ export default class Editor2D {
                 this.ctx.fillStyle = bgFillColor;
                 this.ctx.fillRect(-halfW, -wall.thickness * this.zoom / 2 - 1, halfW * 2, wall.thickness * this.zoom + 2);
                 
-                this.ctx.strokeStyle = isSelected ? '#3b82f6' : (isLight ? '#0f172a' : '#cbd5e1');
-                this.ctx.lineWidth = 2;
+                this.ctx.strokeStyle = isSelected ? '#3b82f6' : (isHovered ? (isLight ? '#db2777' : '#d946ef') : (isLight ? '#0f172a' : '#cbd5e1'));
+                this.ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
                 this.ctx.strokeRect(-halfW, -wall.thickness * this.zoom / 2, halfW * 2, wall.thickness * this.zoom);
                 
-                this.ctx.strokeStyle = isSelected ? '#60a5fa' : (isLight ? '#334155' : '#94a3b8');
+                this.ctx.strokeStyle = isSelected ? '#60a5fa' : (isHovered ? (isLight ? '#f472b6' : '#d946ef') : (isLight ? '#334155' : '#94a3b8'));
                 this.ctx.lineWidth = 1;
                 this.ctx.beginPath();
                 this.ctx.moveTo(-halfW, 0);
@@ -1486,14 +1527,28 @@ export default class Editor2D {
             this.ctx.rotate(rad);
             
             const isLight = this.app.theme === 'light';
-            this.ctx.fillStyle = isSelected ? 'rgba(139, 92, 246, 0.15)' : (isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.04)');
-            this.ctx.fillRect(-w/2, -l/2, w, l);
+            const isHovered = this.hoveredItem === furn;
             
-            this.ctx.strokeStyle = isSelected ? '#8b5cf6' : (isLight ? '#0f172a' : '#64748b');
-            this.ctx.lineWidth = isSelected ? 2 : 1.5;
-            this.ctx.strokeRect(-w/2, -l/2, w, l);
+            if (isHovered && !isSelected) {
+                // Brillo / Glow para hover (magenta esmerilado que pulsa)
+                this.ctx.shadowColor = isLight ? '#db2777' : '#d946ef';
+                this.ctx.shadowBlur = 12 + Math.sin(Date.now() / 120) * 4;
+                this.ctx.fillStyle = isLight ? 'rgba(219, 39, 119, 0.08)' : 'rgba(217, 70, 239, 0.12)';
+                this.ctx.fillRect(-w/2, -l/2, w, l);
+                
+                this.ctx.strokeStyle = isLight ? '#db2777' : '#d946ef';
+                this.ctx.lineWidth = 2.5;
+                this.ctx.strokeRect(-w/2, -l/2, w, l);
+            } else {
+                this.ctx.fillStyle = isSelected ? 'rgba(139, 92, 246, 0.15)' : (isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.04)');
+                this.ctx.fillRect(-w/2, -l/2, w, l);
+                
+                this.ctx.strokeStyle = isSelected ? '#8b5cf6' : (isLight ? '#0f172a' : '#64748b');
+                this.ctx.lineWidth = isSelected ? 2 : 1.5;
+                this.ctx.strokeRect(-w/2, -l/2, w, l);
+            }
             
-            this.ctx.fillStyle = isSelected ? '#a78bfa' : (isLight ? '#334155' : '#475569');
+            this.ctx.fillStyle = isSelected ? '#a78bfa' : (isHovered ? (isLight ? '#db2777' : '#d946ef') : (isLight ? '#334155' : '#475569'));
             this.ctx.beginPath();
             this.ctx.moveTo(0, l/2 - 4);
             this.ctx.lineTo(-6, l/2 - 10);
